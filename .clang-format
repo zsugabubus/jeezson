@@ -1,0 +1,14 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+ReflowComments: false
+SortIncludes: false
+UseTab: Always
+AlignEscapedNewlines: Left
+BreakBeforeBraces: Linux
+AllowShortIfStatementsOnASingleLine: false
+IndentCaseLabels: false
+IndentPPDirectives: AfterHash
+ColumnLimit: 80
+BinPackArguments: true
+BinPackParameters: true
