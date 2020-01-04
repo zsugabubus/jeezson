@@ -52,41 +52,75 @@ struct json_writer {
 	/* TODO(?): size_t depth. */
 };
 
-int json_parse(char *buf, json_node **pnodes, size_t *pnnodes);
-json_node *json_get(json_node *node, char const *keystr);
+int
+json_parse(char *buf, json_node *__restrict *__restrict pnodes,
+		   size_t *__restrict pnnodes);
+json_node *
+json_get(json_node *__restrict node, char const *__restrict keystr);
 
 #if defined(__GNUC__)
-__attribute__((const))
+__attribute__((const, always_inline))
 #endif
-inline json_node *
-json_next(json_node *node)
+static inline size_t
+json_sibl(json_node *__restrict node)
+{
+	return node->flags >> 3;
+}
+
+#if defined(__GNUC__)
+__attribute__((const, always_inline))
+#endif
+static inline enum json_node_type
+json_type(json_node *__restrict node)
+{
+	return node->flags & 0x7;
+}
+
+#if defined(__GNUC__)
+__attribute__((const, always_inline))
+#endif
+static inline json_node *
+json_next(json_node *__restrict node)
 {
 	return (json_sibl(node) > 0 ? node + json_sibl(node) : NULL);
 }
 
 #if defined(__GNUC__)
-__attribute__((const))
+__attribute__((const, always_inline))
 #endif
-inline int
-json_isempty(json_node *node)
+static inline int
+json_isempty(json_node *__restrict node)
 {
 	return node->flags < 8;
 }
 
-int json_writer_init(struct json_writer *w);
-void json_writer_term(struct json_writer *w);
-void json_writer_free(struct json_writer *w);
+int
+json_writer_init(struct json_writer *__restrict w);
+void
+json_writer_term(struct json_writer *__restrict w);
+void
+json_writer_free(struct json_writer *__restrict w);
 
-void json_write_null(struct json_writer *w);
-void json_write_bool(struct json_writer *w, int b);
-void json_write_num(struct json_writer *w, double num);
-void json_write_int(struct json_writer *w, unsigned long num);
-void json_write_beginarr(struct json_writer *w);
-void json_write_endarr(struct json_writer *w);
-void json_write_beginobj(struct json_writer *w);
-void json_write_endobj(struct json_writer *w);
-int json_write_str(struct json_writer *w, char const *s);
-int json_write_key(struct json_writer *w, char const *s);
+void
+json_write_null(struct json_writer *__restrict w);
+void
+json_write_bool(struct json_writer *__restrict w, int b);
+void
+json_write_num(struct json_writer *__restrict w, double num);
+void
+json_write_int(struct json_writer *__restrict w, unsigned long num);
+void
+json_write_beginarr(struct json_writer *__restrict w);
+void
+json_write_endarr(struct json_writer *__restrict w);
+void
+json_write_beginobj(struct json_writer *__restrict w);
+void
+json_write_endobj(struct json_writer *__restrict w);
+int
+json_write_str(struct json_writer *__restrict w, char const *__restrict s);
+int
+json_write_key(struct json_writer *__restrict w, char const *__restrict s);
 
 #endif
 /* vi:set ft=c noet ts=4 sw=4: */

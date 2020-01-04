@@ -24,33 +24,30 @@
 
 #include "jeezson.h"
 
-#define json_type(node) (enum json_node_type)((node)->flags & 0x7)
-#define json_sibl(node) ((node)->flags >> 3)
-
 #if defined(__GNUC__) || defined(__clang__)
-#	define attribute_nonnull __attribute__((nonnull))
-#	define attribute_returnsnonnull __attribute__((returns_nonnull))
+#define attribute_nonnull __attribute__((nonnull))
+#define attribute_returnsnonnull __attribute__((returns_nonnull))
 #else
-#	define attribute_nonnull
-#	define attribute_returnsnonnull
+#define attribute_nonnull
+#define attribute_returnsnonnull
 #endif
 
 #if defined(__GNUC__)
-#	define attribute_warnunused __attribute__((warn_unused_result))
+#define attribute_warnunused __attribute__((warn_unused_result))
 #else
-#	define attribute_warnunused
+#define attribute_warnunused
 #endif
 
 #if defined(__GNUC__)
-#	define attribute_const __attribute__((const))
+#define attribute_const __attribute__((const))
 #else
-#	define attribute_const
+#define attribute_const
 #endif
 
 typedef uint32_t char32_t;
 
-attribute_nonnull
-static uint8_t utf8_cpychr(char *dest, char const *src)
+attribute_nonnull static uint8_t
+utf8_cpychr(char *dest, char const *src)
 {
 	uint8_t len;
 
@@ -70,23 +67,22 @@ static uint8_t utf8_cpychr(char *dest, char const *src)
 #undef B
 	switch (len) {
 	case 3:
-		dest[3] = src[3];
+		dest[len - 3] = src[len - 3];
 		/* Fall through. */
 	case 2:
-		dest[2] = src[2];
+		dest[len - 2] = src[len - 2];
 		/* Fall through. */
 	case 1:
-		dest[1] = src[1];
+		dest[len - 1] = src[len - 1];
 		/* Fall through. */
 	default:
-		dest[0] = src[0];
+		dest[len] = src[len];
 	}
 	return len + 1;
 }
 
-attribute_nonnull
-static uint8_t utf8_writechr(char *dest, char32_t codepoint)
-
+attribute_nonnull static uint8_t
+utf8_writechr(char *__restrict dest, char32_t codepoint)
 {
 	if (codepoint <= 0x7f) {
 		/* U+0000..U+007f */
@@ -94,20 +90,20 @@ static uint8_t utf8_writechr(char *dest, char32_t codepoint)
 		return 1;
 	} else if (codepoint <= 0x7ff) {
 		/* U+0080..U+07FF */
-		dest[0] = 0xc0 |  codepoint >> 6;
+		dest[0] = 0xc0 | codepoint >> 6;
 		dest[1] = 0x80 | (codepoint & 0x3f);
 		return 2;
 	} else if (codepoint <= 0xffff) {
 		/* U+0800..U+FFFF */
-		dest[0] = 0xe0 |  codepoint >> 12;
+		dest[0] = 0xe0 | codepoint >> 12;
 		dest[1] = 0x80 | (codepoint >> 6 & 0x3f);
 		dest[2] = 0x80 | (codepoint & 0x3f);
 		return 3;
 	} else {
 		/* U+10000..U+10ffff */
-		dest[0] = 0xf0 |  codepoint >> 18;
+		dest[0] = 0xf0 | codepoint >> 18;
 		dest[1] = 0x80 | (codepoint >> 12 & 0x3f);
-		dest[2] = 0x80 | (codepoint >> 6  & 0x3f);
+		dest[2] = 0x80 | (codepoint >> 6 & 0x3f);
 		dest[3] = 0x80 | (codepoint & 0x3f);
 		return 4;
 	}
@@ -116,7 +112,8 @@ static uint8_t utf8_writechr(char *dest, char32_t codepoint)
 static char const *HEX_DIGITS = "0123456789abcdef";
 
 attribute_nonnull
-static uint8_t hex16_parse(char const *src, uint16_t *pval)
+static uint8_t
+hex16_parse(char const *__restrict src, uint16_t *__restrict pval)
 {
 	uint16_t val = 0;
 	unsigned i;
@@ -131,7 +128,8 @@ static uint8_t hex16_parse(char const *src, uint16_t *pval)
 }
 
 attribute_nonnull
-static uint8_t hex16_write(char *dest, uint16_t val)
+	static uint8_t
+hex16_write(char *dest, uint16_t val)
 {
 	dest[0] = HEX_DIGITS[(val >> 12) & 0xf];
 	dest[1] = HEX_DIGITS[(val >> 8) & 0xf];
@@ -140,14 +138,14 @@ static uint8_t hex16_write(char *dest, uint16_t val)
 	return 4;
 }
 
-attribute_const
-static char32_t utf32_fromsurrogates(uint16_t high, uint16_t low)
+attribute_const static char32_t
+utf32_fromsurrogates(uint16_t high, uint16_t low)
 {
 	return 0x10000 + (((char32_t)(high & 0x3ff) << 10) | (low & 0x3ff));
 }
 
-attribute_warnunused
-static int ensure_size(struct json_writer *w, size_t size)
+attribute_warnunused static int
+ensure_size(struct json_writer *__restrict w, size_t size)
 {
 	char *p;
 
@@ -163,9 +161,8 @@ static int ensure_size(struct json_writer *w, size_t size)
 	return 1;
 }
 
-attribute_warnunused
-attribute_const
-static int json_iswhitespace(char c)
+attribute_warnunused attribute_const static int
+json_iswhitespace(char c)
 {
 	switch (c) {
 	case ' ':
@@ -177,9 +174,8 @@ static int json_iswhitespace(char c)
 	return 0;
 }
 
-attribute_warnunused
-attribute_nonnull
-json_node *json_get(json_node *node, char const *keystr)
+attribute_warnunused attribute_nonnull json_node *
+json_get(json_node *__restrict node, char const *__restrict keystr)
 {
 	size_t keysize;
 
@@ -200,8 +196,67 @@ json_node *json_get(json_node *node, char const *keystr)
 	return node;
 }
 
-attribute_nonnull
-int json_parse(char *s, json_node **pnodes, size_t *pnnodes)
+attribute_warnunused attribute_nonnull attribute_returnsnonnull static char *
+parse_str(char *__restrict s)
+{
+	char *p;
+
+	for (p = ++s; s[0] != '"';) {
+		if (s[0] != '\\') {
+			uint8_t nbytes = utf8_cpychr(p, s);
+			p += nbytes, s += nbytes;
+		} else {
+			switch (s[1]) {
+			default:
+				p[0] = s[1];
+				break;
+			case 'b':
+				p[0] = '\b';
+				break;
+			case 'f':
+				p[0] = '\f';
+				break;
+			case 'n':
+				p[0] = '\n';
+				break;
+			case 'r':
+				p[0] = '\r';
+				break;
+			case 't':
+				p[0] = '\t';
+				break;
+			case 'u': {
+				uint16_t high, low;
+				char32_t unicode;
+
+				s += 2;
+				s += hex16_parse(s, &high);
+
+				if (high < 0xd800 || 0xdfff < high) {
+					unicode = high;
+				} else {
+					/* Handle an UTF-16 surrogate pair. */
+					s += 2;
+					s += hex16_parse(s, &low);
+
+					unicode = utf32_fromsurrogates(high, low);
+				}
+
+				p += utf8_writechr(p, unicode);
+				continue;
+			}
+			}
+			p += 1, s += 2;
+		}
+	}
+	/* Overwrite final `"'. */
+	*s++ = '\0';
+	return s;
+}
+
+attribute_nonnull int
+json_parse(char *s, json_node *__restrict *__restrict pnodes,
+		   size_t *__restrict pnnodes)
 {
 	uint8_t depth;
 	size_t nodeidx = 0;
@@ -229,8 +284,8 @@ int json_parse(char *s, json_node **pnodes, size_t *pnnodes)
 
 		switch (*s) {
 		case '"': {
-			int const isval = !(isobj & (1 << depth)) ||
-							  NULL != node->keystr node->type = json_str;
+			int const isval = !(isobj & (1 << depth)) || NULL != node->keystr;
+			node->type = json_str;
 			if (isval)
 				node->val.str = s;
 			else
@@ -296,71 +351,15 @@ int json_parse(char *s, json_node **pnodes, size_t *pnnodes)
 
 		++node;
 	} while (depth > 0);
+
+	return 1;
 }
 
-attribute_warnunused
-attribute_nonnull
-attribute_returnsnonnull
-static char *parse_str(char *s)
-{
-	char *p;
+static int
+ensure_size(struct json_writer *__restrict w, size_t newlen);
 
-	for (p = ++s; s[0] != '"';) {
-		if (s[0] != '\\') {
-			uint8_t nbytes = utf8_cpychr(p, s);
-			p += nbytes, s += nbytes;
-		} else {
-			switch (s[1]) {
-			default:
-				p[0] = s[1];
-				break;
-			case 'b':
-				p[0] = '\b';
-				break;
-			case 'f':
-				p[0] = '\f';
-				break;
-			case 'n':
-				p[0] = '\n';
-				break;
-			case 'r':
-				p[0] = '\r';
-				break;
-			case 't':
-				p[0] = '\t';
-				break;
-			case 'u': {
-				uint16_t high, low;
-				char32_t unicode;
-
-				s += 2;
-				s += hex16_parse(s, &high);
-
-				if (high < 0xd800 || 0xdfff < high) {
-					unicode = high;
-				} else {
-					/* Handle an UTF-16 surrogate pair. */
-					s += 2;
-					s += hex16_parse(s, &low);
-
-					unicode = utf32_fromsurrogates(high, low);
-				}
-
-				p += utf8_writechr(p, unicode);
-				continue;
-			}
-			}
-			p += 1, s += 2;
-		}
-	}
-	/* Overwrite final `"'. */
-	*s++ = '\0';
-	return s;
-}
-
-static int ensure_size(struct json_writer *w, size_t newlen);
-
-int json_writer_init(struct json_writer *w)
+int
+json_writer_init(struct json_writer *__restrict w)
 {
 	w->buf = NULL;
 	w->len = 0;
@@ -369,17 +368,26 @@ int json_writer_init(struct json_writer *w)
 	return ensure_size(w, 0);
 }
 
-void json_writer_term(struct json_writer *w) { w->buf[w->len] = '\0'; }
+void
+json_writer_term(struct json_writer *__restrict w)
+{
+	w->buf[w->len] = '\0';
+}
 
-void json_writer_free(struct json_writer *w) { free(w->buf); }
+void
+json_writer_free(struct json_writer *__restrict w)
+{
+	free(w->buf);
+}
 
-#define write_lit(lit)                                            \
-	do {                                                          \
+#define write_lit(lit) \
+	do { \
 		memcpy(w->buf + w->len, lit, strlen(lit) * sizeof(char)); \
-		w->len += strlen(lit);                                    \
+		w->len += strlen(lit); \
 	} while (0)
 
-void json_write_null(struct json_writer *w)
+void
+json_write_null(struct json_writer *__restrict w)
 {
 	if (w->open < w->len)
 		write_lit(",");
@@ -387,7 +395,8 @@ void json_write_null(struct json_writer *w)
 	write_lit("null");
 }
 
-void json_write_bool(struct json_writer *w, int b)
+void
+json_write_bool(struct json_writer *__restrict w, int b)
 {
 	if (w->open < w->len)
 		write_lit(",");
@@ -398,7 +407,8 @@ void json_write_bool(struct json_writer *w, int b)
 		write_lit("false");
 }
 
-void json_write_num(struct json_writer *w, double num)
+void
+json_write_num(struct json_writer *__restrict w, double num)
 {
 	if (w->open < w->len)
 		write_lit(",");
@@ -406,7 +416,8 @@ void json_write_num(struct json_writer *w, double num)
 	w->len += sprintf(w->buf + w->len, "%.15g", num);
 }
 
-void json_write_int(struct json_writer *w, unsigned long num)
+void
+json_write_int(struct json_writer *__restrict w, unsigned long num)
 {
 	if (w->open < w->len)
 		write_lit(",");
@@ -414,7 +425,8 @@ void json_write_int(struct json_writer *w, unsigned long num)
 	w->len += sprintf(w->buf + w->len, "%lu", num);
 }
 
-void json_write_beginarr(struct json_writer *w)
+void
+json_write_beginarr(struct json_writer *__restrict w)
 {
 	if (w->open < w->len)
 		write_lit(",");
@@ -423,13 +435,15 @@ void json_write_beginarr(struct json_writer *w)
 	w->open = w->len;
 }
 
-void json_write_endarr(struct json_writer *w)
+void
+json_write_endarr(struct json_writer *__restrict w)
 {
 	write_lit("]");
 	w->open = 0;
 }
 
-void json_write_beginobj(struct json_writer *w)
+void
+json_write_beginobj(struct json_writer *__restrict w)
 {
 	if (w->open < w->len)
 		write_lit(",");
@@ -438,13 +452,15 @@ void json_write_beginobj(struct json_writer *w)
 	w->open = w->len;
 }
 
-void json_write_endobj(struct json_writer *w)
+void
+json_write_endobj(struct json_writer *__restrict w)
 {
 	write_lit("}");
 	w->open = 0;
 }
 
-int json_write_key(struct json_writer *w, char const *s)
+int
+json_write_key(struct json_writer *__restrict w, char const *__restrict s)
 {
 	if (!json_write_str(w, s))
 		return 0;
@@ -454,7 +470,8 @@ int json_write_key(struct json_writer *w, char const *s)
 	return 1;
 }
 
-int json_write_str(struct json_writer *w, char const *s)
+int
+json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 {
 	char *p;
 	char const *q;
