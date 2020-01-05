@@ -96,45 +96,111 @@ json_isempty(json_node *__restrict node)
 
 int
 json_writer_init(struct json_writer *__restrict w);
-void
-json_writer_term(struct json_writer *__restrict w);
+
+static inline void
+json_writer_term(struct json_writer *__restrict w)
+{
+	w->buf[w->len] = '\0';
+}
+
 void
 json_writer_free(struct json_writer *__restrict w);
 
-void
-json_write_null(struct json_writer *__restrict w);
-void
-json_write_bool(struct json_writer *__restrict w, int b);
-void
-json_write_num(struct json_writer *__restrict w, double num);
-void
-json_write_int(struct json_writer *__restrict w, unsigned long num);
-void
-json_write_beginarr(struct json_writer *__restrict w);
-void
-json_write_endarr(struct json_writer *__restrict w);
-void
-json_write_beginobj(struct json_writer *__restrict w);
-void
-json_write_endobj(struct json_writer *__restrict w);
+
+#define json_write_lit(lit) \
+	do { \
+		memcpy(w->buf + w->len, lit, strlen(lit) * sizeof(char)); \
+		w->len += strlen(lit); \
+	} while (0)
+
+static inline void
+json_write_null(struct json_writer *__restrict w)
+{
+	if (w->open < w->len)
+		json_write_lit(",");
+
+	json_write_lit("null");
+}
+
+static inline void
+json_write_bool(struct json_writer *__restrict w, int b)
+{
+	if (w->open < w->len)
+		json_write_lit(",");
+
+	if (b)
+		json_write_lit("true");
+	else
+		json_write_lit("false");
+}
+
+static inline void
+json_write_num(struct json_writer *__restrict w, double num)
+{
+	if (w->open < w->len)
+		json_write_lit(",");
+
+	w->len += sprintf(w->buf + w->len, "%.15g", num);
+}
+
+static inline void
+json_write_int(struct json_writer *__restrict w, unsigned long num)
+{
+	if (w->open < w->len)
+		json_write_lit(",");
+
+	w->len += sprintf(w->buf + w->len, "%lu", num);
+}
+
+static inline void
+json_write_beginarr(struct json_writer *__restrict w)
+{
+	if (w->open < w->len)
+		json_write_lit(",");
+
+	json_write_lit("[");
+	w->open = w->len;
+}
+
+static inline void
+json_write_endarr(struct json_writer *__restrict w)
+{
+	json_write_lit("]");
+	w->open = 0;
+}
+
+static inline void
+json_write_beginobj(struct json_writer *__restrict w)
+{
+	if (w->open < w->len)
+		json_write_lit(",");
+
+	json_write_lit("{");
+	w->open = w->len;
+}
+
+static inline void
+json_write_endobj(struct json_writer *__restrict w)
+{
+	json_write_lit("}");
+	w->open = 0;
+}
+
 int
 json_write_str(struct json_writer *__restrict w, char const *__restrict s);
-int
-json_write_key(struct json_writer *__restrict w, char const *__restrict s);
 
-static inline char const *
-json_strtype(enum json_node_type type) {
-	char const* const TYPE_NAMES[] = {
-		"false",
-		"true",
-		"null",
-		"string",
-		"number",
-		"array",
-		"object",
-	};
-	return TYPE_NAMES[type];
+static inline int
+json_write_key(struct json_writer *__restrict w, char const *__restrict s)
+{
+	if (!json_write_str(w, s))
+		return 0;
+	json_write_lit(":");
+	w->open = w->len;
+
+	return 1;
 }
+
+#undef json_write_lit
 
 void
 json_debug(json_node *node, unsigned level);
