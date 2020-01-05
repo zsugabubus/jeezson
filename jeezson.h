@@ -33,14 +33,13 @@ enum json_node_type {
 typedef struct json_node json_node;
 
 struct json_node {
-	size_t flags;
-
-	enum json_node_type type;
+	size_t sibltype;
 
 	char const *keystr;
 	union {
 		char const *str;
 		double num;
+		size_t len;
 	} val;
 };
 
@@ -64,7 +63,7 @@ __attribute__((const, always_inline))
 static inline size_t
 json_sibl(json_node *__restrict node)
 {
-	return node->flags >> 3;
+	return node->sibltype >> 3;
 }
 
 #if defined(__GNUC__)
@@ -73,7 +72,7 @@ __attribute__((const, always_inline))
 static inline enum json_node_type
 json_type(json_node *__restrict node)
 {
-	return node->flags & 0x7;
+	return node->sibltype & 0x7;
 }
 
 #if defined(__GNUC__)
@@ -91,7 +90,8 @@ __attribute__((const, always_inline))
 static inline int
 json_isempty(json_node *__restrict node)
 {
-	return node->flags < 8;
+	assert(json_type(node) == json_obj || json_type(node) == json_arr);
+	return node->val.len;
 }
 
 int
@@ -121,6 +121,23 @@ int
 json_write_str(struct json_writer *__restrict w, char const *__restrict s);
 int
 json_write_key(struct json_writer *__restrict w, char const *__restrict s);
+
+static inline char const *
+json_strtype(enum json_node_type type) {
+	char const* const TYPE_NAMES[] = {
+		"false",
+		"true",
+		"null",
+		"string",
+		"number",
+		"array",
+		"object",
+	};
+	return TYPE_NAMES[type];
+}
+
+void
+json_debug(json_node *node, unsigned level);
 
 #endif
 /* vi:set ft=c noet ts=4 sw=4: */

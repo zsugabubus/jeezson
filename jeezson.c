@@ -111,8 +111,7 @@ utf8_writechr(char *__restrict dest, char32_t codepoint)
 
 static char const *HEX_DIGITS = "0123456789abcdef";
 
-attribute_nonnull
-static uint8_t
+attribute_nonnull static uint8_t
 hex16_parse(char const *__restrict src, uint16_t *__restrict pval)
 {
 	uint16_t val = 0;
@@ -127,8 +126,7 @@ hex16_parse(char const *__restrict src, uint16_t *__restrict pval)
 	return 4;
 }
 
-attribute_nonnull
-	static uint8_t
+attribute_nonnull static uint8_t
 hex16_write(char *dest, uint16_t val)
 {
 	dest[0] = HEX_DIGITS[(val >> 12) & 0xf];
@@ -179,10 +177,10 @@ json_get(json_node *__restrict node, char const *__restrict keystr)
 {
 	size_t keysize;
 
-	assert(node->type == json_obj || node->type == json_arr);
-
-	if (json_isempty(node))
+	if (0 == node->val.len)
 		return NULL;
+	/* if (json_isempty(node))
+		return NULL; */
 
 	keysize = strlen(keystr) + 1;
 
@@ -258,13 +256,115 @@ attribute_nonnull int
 json_parse(char *s, json_node *__restrict *__restrict pnodes,
 		   size_t *__restrict pnnodes)
 {
-	uint8_t depth;
-	size_t nodeidx = 0;
+	uint8_t depth = 0;
+	size_t nodeidx = -1;
 	size_t isobj = 0;
-	size_t leaves[sizeof isobj * CHAR_BIT];
+	size_t parents[sizeof isobj * CHAR_BIT];
+	size_t lengths[sizeof isobj * CHAR_BIT];
+	size_t siblings[sizeof isobj * CHAR_BIT];
 
-	do {
+	goto start;
+	for (;;) {
 		json_node *node;
+
+		while (json_iswhitespace(*s))
+			++s;
+
+		printf("#(%d/%d)%s\n", depth, (int)nodeidx, "");
+		switch (*s) {
+		case '"': {
+			int const isval = !(isobj & (1 << depth)) || NULL != node->keystr;
+			node->sibltype = json_str;
+			if (isval)
+				node->val.str = s + 1;
+			else
+				node->keystr = s + 1;
+
+			s = parse_str(s);
+
+			/* >> (depth + 1); underflowed? */
+			if (isval) {
+				printf(" --val: %s\n", node->val.str);
+				break;
+			} else {
+				printf(" --key: %s\n", node->keystr);
+				while (*s++ != ':')
+					;
+				continue;
+			}
+		}
+
+		case '[':
+			node->sibltype = json_arr;
+			goto init_container;
+		case '{':
+			node->sibltype = json_obj;
+			isobj ^= (2 << depth);
+		init_container:
+			++depth;
+			assert(depth < 32);
+			lengths[depth] = 0;
+			parents[depth] = nodeidx;
+			siblings[depth] = nodeidx + 1;
+			printf(">>> parents[%d] = %d\n", depth, (int)nodeidx);
+			s += 1;
+			goto start;
+			break;
+
+		case '}':
+			isobj ^= (1 << depth);
+			/* Fall through. */
+		case ']':
+			printf("<<< parents[%d] = %d; ch=%d\n", depth, (int)parents[depth],
+				   (int)lengths[depth]);
+			(*pnodes)[parents[depth]].val.len =
+				lengths[depth] + !!(parents[depth] != nodeidx);
+			s += 1;
+			if (--depth == 0)
+				goto update_sibling;
+			continue;
+
+		case 'f':
+			node->sibltype = json_false;
+			s += strlen("false");
+			break;
+
+		case 't':
+			node->sibltype = json_true;
+			s += strlen("true");
+			break;
+
+		case ',':
+			++lengths[depth];
+
+			printf("on depth %d %d->%d\n", depth, (int)siblings[depth],
+				   (int)nodeidx);
+
+			(*pnodes)[siblings[depth]].sibltype |= (nodeidx - siblings[depth])
+												   << 3;
+			siblings[depth] = nodeidx;
+
+			s += 1;
+			continue;
+
+		case 'n':
+			node->sibltype = json_null;
+			s += strlen("null");
+			break;
+
+		default:
+			printf("--(num)\n");
+			node->sibltype = json_num;
+			node->val.num = strtod(s, &s);
+			break;
+		}
+
+	update_sibling:
+		if (depth == 0)
+			return 1;
+
+	start:
+		++nodeidx;
 
 		if (nodeidx >= *pnnodes) {
 			void *p;
@@ -275,82 +375,9 @@ json_parse(char *s, json_node *__restrict *__restrict pnodes,
 
 			*pnodes = p;
 		}
-		node = &(*pnodes)[nodeidx++];
+		node = &(*pnodes)[nodeidx];
 		node->keystr = NULL;
-
-	parse_value:
-		while (json_iswhitespace(*s))
-			++s;
-
-		switch (*s) {
-		case '"': {
-			int const isval = !(isobj & (1 << depth)) || NULL != node->keystr;
-			node->type = json_str;
-			if (isval)
-				node->val.str = s;
-			else
-				node->keystr = s;
-
-			s = parse_str(s);
-
-			/* >> (depth + 1); underflowed? */
-			if (isval) {
-				break;
-			} else {
-				while (*s++ != ':')
-					;
-				goto parse_value;
-			}
-		}
-
-		case '[':
-			node->type = json_arr;
-			++depth;
-			s += 1;
-			break;
-		case '{':
-			node->type = json_obj;
-			isobj ^= (1 << ++depth);
-			s += 1;
-			break;
-
-		case '}':
-			isobj ^= (1 << depth);
-			/* Fall through. */
-		case ']':
-			--depth;
-			s += 1;
-			break;
-
-		case 'f':
-			node->type = json_false;
-			s += strlen("false");
-			break;
-
-		case 't':
-			node->type = json_true;
-			s += strlen("true");
-			break;
-
-		case ',':
-			(*pnodes)[leaves[depth]].flags |= node - *pnodes;
-			leaves[depth] = node - *pnodes;
-			s += 1;
-			break;
-
-		case 'n':
-			node->type = json_null;
-			s += strlen("null");
-			break;
-
-		default:
-			node->type = json_num;
-			node->val.num = strtod(s, &s);
-			break;
-		}
-
-		++node;
-	} while (depth > 0);
+	}
 
 	return 1;
 }
@@ -539,6 +566,39 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 	w->len = p - w->buf;
 	write_lit("\"");
 	return 1;
+}
+
+void
+json_debug(json_node *node, unsigned level)
+{
+	if (NULL == node) {
+		printf("(null)\n");
+		return;
+	}
+
+	do {
+		printf("%s%c%3d %s", "                                " + (32 - level),
+			   json_type(node) == json_obj || json_type(node) == json_arr ? '+'
+																		  : '-',
+			   (unsigned)node->sibltype >> 3, node->keystr ? node->keystr : "");
+		switch (json_type(node)) {
+		case json_obj:
+		case json_arr:
+			printf(":\n");
+			if (node->val.len > 0) {
+				json_debug(node + 1, level + 1);
+			}
+			break;
+		case json_num:
+			printf(":(num)%f\n", node->val.num);
+			break;
+		case json_str:
+			printf(":(str)%s\n", node->val.str);
+			break;
+		default:
+			printf("\n");
+		}
+	} while ((node = json_next(node)));
 }
 
 #undef write_lit
