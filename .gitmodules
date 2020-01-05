@@ -1,0 +1,4 @@
+[submodule "tests/c1"]
+	path = tests/c1
+	url = https://github.com/zsugabubus/c1
+    branch = c1
