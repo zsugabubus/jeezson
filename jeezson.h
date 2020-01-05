@@ -60,7 +60,7 @@ json_get(json_node *__restrict node, char const *__restrict keystr);
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static inline size_t
+static __inline__ size_t
 json_sibl(json_node *__restrict node)
 {
 	return node->sibltype >> 3;
@@ -69,7 +69,7 @@ json_sibl(json_node *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static inline enum json_node_type
+static __inline__ enum json_node_type
 json_type(json_node *__restrict node)
 {
 	return node->sibltype & 0x7;
@@ -78,7 +78,7 @@ json_type(json_node *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static inline json_node *
+static __inline__ json_node *
 json_next(json_node *__restrict node)
 {
 	return (json_sibl(node) > 0 ? node + json_sibl(node) : NULL);
@@ -87,17 +87,16 @@ json_next(json_node *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static inline int
+static __inline__ int
 json_isempty(json_node *__restrict node)
 {
-	assert(json_type(node) == json_obj || json_type(node) == json_arr);
 	return node->val.len;
 }
 
 int
 json_writer_init(struct json_writer *__restrict w);
 
-static inline void
+static __inline__ void
 json_writer_term(struct json_writer *__restrict w)
 {
 	w->buf[w->len] = '\0';
@@ -113,7 +112,7 @@ json_writer_free(struct json_writer *__restrict w);
 		w->len += strlen(lit); \
 	} while (0)
 
-static inline void
+static __inline__ void
 json_write_null(struct json_writer *__restrict w)
 {
 	if (w->open < w->len)
@@ -122,7 +121,7 @@ json_write_null(struct json_writer *__restrict w)
 	json_write_lit("null");
 }
 
-static inline void
+static __inline__ void
 json_write_bool(struct json_writer *__restrict w, int b)
 {
 	if (w->open < w->len)
@@ -134,7 +133,7 @@ json_write_bool(struct json_writer *__restrict w, int b)
 		json_write_lit("false");
 }
 
-static inline void
+static __inline__ void
 json_write_num(struct json_writer *__restrict w, double num)
 {
 	if (w->open < w->len)
@@ -143,7 +142,7 @@ json_write_num(struct json_writer *__restrict w, double num)
 	w->len += sprintf(w->buf + w->len, "%.15g", num);
 }
 
-static inline void
+static __inline__ void
 json_write_int(struct json_writer *__restrict w, unsigned long num)
 {
 	if (w->open < w->len)
@@ -152,7 +151,7 @@ json_write_int(struct json_writer *__restrict w, unsigned long num)
 	w->len += sprintf(w->buf + w->len, "%lu", num);
 }
 
-static inline void
+static __inline__ void
 json_write_beginarr(struct json_writer *__restrict w)
 {
 	if (w->open < w->len)
@@ -162,14 +161,14 @@ json_write_beginarr(struct json_writer *__restrict w)
 	w->open = w->len;
 }
 
-static inline void
+static __inline__ void
 json_write_endarr(struct json_writer *__restrict w)
 {
 	json_write_lit("]");
 	w->open = 0;
 }
 
-static inline void
+static __inline__ void
 json_write_beginobj(struct json_writer *__restrict w)
 {
 	if (w->open < w->len)
@@ -179,7 +178,7 @@ json_write_beginobj(struct json_writer *__restrict w)
 	w->open = w->len;
 }
 
-static inline void
+static __inline__ void
 json_write_endobj(struct json_writer *__restrict w)
 {
 	json_write_lit("}");
@@ -189,7 +188,7 @@ json_write_endobj(struct json_writer *__restrict w)
 int
 json_write_str(struct json_writer *__restrict w, char const *__restrict s);
 
-static inline int
+static __inline__ int
 json_write_key(struct json_writer *__restrict w, char const *__restrict s)
 {
 	if (!json_write_str(w, s))
