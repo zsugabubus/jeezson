@@ -35,8 +35,10 @@
 
 #if defined(__GNUC__)
 #define attribute_warnunused __attribute__((warn_unused_result))
+#define attribute_alwaysinline __attribute__((always_inline))
 #else
 #define attribute_warnunused
+#define attribute_alwaysinline
 #endif
 
 #if defined(__GNUC__)
@@ -48,7 +50,8 @@
 typedef uint32_t char32_t;
 typedef uint16_t char16_t;
 
-static inline uint8_t
+attribute_alwaysinline
+static __inline__ uint8_t
 utf8_chrlen(char s)
 {
 	/*
@@ -61,13 +64,13 @@ utf8_chrlen(char s)
 	 *
 	 * */
 #define B(v, n) ((v - 1) << (n * 2))
-	return (((B(4, 15) | B(3, 14) | B(2, 13) | B(2, 12)) >>
-			(((unsigned char)s) >> 4) << 1) &
+	return (((uint32_t)(B(4, 15) | B(3, 14) | B(2, 13) | B(2, 12)) >>
+			((((unsigned char)s) >> 4) << 1)) &
 		   3);
 #undef B
 }
 
-attribute_nonnull static inline uint8_t
+attribute_nonnull static __inline__ uint8_t
 utf8_chrcpy(char *dest, char const *src)
 {
 	uint8_t const len = utf8_chrlen(*src);
@@ -119,30 +122,32 @@ utf32_toutf8(char *__restrict dest, char32_t codepoint)
 attribute_const static char32_t
 utf32_fromsurrogates(char16_t high, char16_t low)
 {
-	return 0x10000 + (((char32_t)(high & 0x3ff) << 10) | (low & 0x3ff));
+	return 0x10000U + (((char32_t)(high & 0x3ffU) << 10) | (low & 0x3ffU));
 }
 
-attribute_warnunused attribute_const
-static inline int
+attribute_warnunused attribute_const attribute_alwaysinline
+static __inline__ int
 ascii_iscntrl(char c)
 {
-	return c <= 0x1f || c == 0x7f/*del*/;
+	return (unsigned char)c <= 0x1fU || (unsigned char)c == 0x7fU/*del*/;
 }
 
-attribute_warnunused attribute_const static inline int
+attribute_warnunused attribute_const attribute_alwaysinline
+static __inline__ int
 json_iswhitespace(char c)
 {
 	return ' ' == c || '\t' == c || '\r' == c || '\n' == c;
 }
 
-attribute_warnunused attribute_const
-static inline int
+attribute_warnunused attribute_const attribute_alwaysinline
+static __inline__ int
 json_isspecial(char c)
 {
 	return '"' == c || '\\' == c;
 }
 
-attribute_nonnull static inline uint16_t
+attribute_nonnull attribute_alwaysinline
+static __inline__ uint16_t
 hex16_fromstr(char const *__restrict src)
 {
 	union {
@@ -179,7 +184,7 @@ a-10	01010111
 a  97	01100001
 f  102	01100110
 */
-#define S(v) ((v << 24) | (v << 16) | (v << 8) | (v << 0))
+#define S(v) (((v) << 24) | ((v) << 16) | ((v) << 8) | ((v) << 0))
 	/* Make input lowercase. */
 	u.v |= S(0x20U);
 	u.v -= S('a' - 10U) ^ ((u.v & S(0x10U)) >> 4) * 0x67U;
@@ -190,7 +195,8 @@ f  102	01100110
 
 static char const *HEX_DIGITS = "0123456789abcdef";
 
-attribute_nonnull static inline void
+attribute_nonnull attribute_alwaysinline
+static __inline__ void
 hex16_tostr(char *dest, uint16_t val)
 {
 	dest[0] = HEX_DIGITS[(val >> 12) & 0xf];
@@ -486,9 +492,12 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 
 	*p++ = '\"';
 	while (*s != '\0') {
+			printf("k %x\n", s[0]);
 		if (!ascii_iscntrl(s[0])) {
+			printf("c %x\n", *s);
 			if (!json_isspecial(s[0])) {
 				uint8_t const nbytes = utf8_chrcpy(p, s);
+				printf("kkk %d\n", nbytes);
 				p += nbytes, s += nbytes;
 				continue;
 			} else {
