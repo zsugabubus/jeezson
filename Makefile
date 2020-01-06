@@ -3,4 +3,4 @@ jeezson.a: jeezson.c jeezson.h
 
 .PHONY: tests
 tests:
-	$(MAKE) -c tests
+	$(MAKE) -C tests
