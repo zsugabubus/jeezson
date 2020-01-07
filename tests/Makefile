@@ -1,6 +1,6 @@
 .PHONY: tests
 tests: test
-	./test
+	./$^
 
 test: c1/test.h c1/test.c *.c
 	# -fsanitize=undefined,null
