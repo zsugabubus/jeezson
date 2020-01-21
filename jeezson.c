@@ -34,16 +34,10 @@
 #endif
 
 #if defined(__GNUC__)
-#define attribute_warnunused __attribute__((warn_unused_result))
 #define attribute_alwaysinline __attribute__((always_inline))
-#else
-#define attribute_warnunused
-#define attribute_alwaysinline
-#endif
-
-#if defined(__GNUC__)
 #define attribute_const __attribute__((const))
 #else
+#define attribute_alwaysinline
 #define attribute_const
 #endif
 
@@ -75,6 +69,7 @@ utf8_chrcpy(char *dest, char const *src)
 {
 	uint8_t const len = utf8_chrlen(*src);
 
+	/* TODO: Measure against `rep mov'. */
 	switch (len) {
 	case 3:
 		dest[len - 3] = src[len - 3];
@@ -122,90 +117,59 @@ utf32_toutf8(char *__restrict dest, char32_t codepoint)
 attribute_const static char32_t
 utf32_fromsurrogates(char16_t high, char16_t low)
 {
-	return 0x10000U + (((char32_t)(high & 0x3ffU) << 10) | (low & 0x3ffU));
+	return 0x10000U + (((char32_t)(high & 0x03ffU) << 10) | (low & 0x03ffU));
 }
 
-attribute_warnunused attribute_const attribute_alwaysinline
+attribute_const attribute_alwaysinline
 static __inline__ int
 ascii_iscntrl(char c)
 {
 	return (unsigned char)c <= 0x1fU || (unsigned char)c == 0x7fU/*del*/;
 }
 
-attribute_warnunused attribute_const attribute_alwaysinline
+attribute_const attribute_alwaysinline
 static __inline__ int
 json_iswhitespace(char c)
 {
 	return ' ' == c || '\t' == c || '\r' == c || '\n' == c;
 }
 
-attribute_warnunused attribute_const attribute_alwaysinline
+attribute_const attribute_alwaysinline
 static __inline__ int
 json_isspecial(char c)
 {
 	return '"' == c || '\\' == c;
 }
 
+uint8_t const HEX4_LOOKUP[16 + 10] = {
+	0, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9
+};
+
+static char const *HEX4_DIGITS = "0123456789abcdef";
+
 attribute_nonnull attribute_alwaysinline
 static __inline__ uint16_t
 hex16_fromstr(char const *__restrict src)
 {
-	union {
-		uint8_t a[4];
-		uint32_t v;
-	} u;
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-	u.a[3] = src[0];
-	u.a[1] = src[1];
-	u.a[2] = src[2];
-	u.a[0] = src[3];
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#warning "Untested endianness."
-	u.a[0] = src[0];
-	u.a[2] = src[1];
-	u.a[1] = src[2];
-	u.a[3] = src[3];
-#elif __BYTE_ORDER__ == __ORDER_PDP_ENDIAN__
-#warning "Untested endianness."
-	u.a[1] = src[0];
-	u.a[3] = src[1];
-	u.a[0] = src[2];
-	u.a[2] = src[3];
-#else
-#error "Unknown endianness."
-#endif
-
-/*
-ch dec	bin
-0  48	00110000
-9  57	00111001
-  xor	01100111 0x67
-a-10	01010111
-a  97	01100001
-f  102	01100110
-*/
-#define S(v) (((v) << 24) | ((v) << 16) | ((v) << 8) | ((v) << 0))
-	/* Make input lowercase. */
-	u.v |= S(0x20U);
-	u.v -= S('a' - 10U) ^ ((u.v & S(0x10U)) >> 4) * 0x67U;
-#undef S
-
-	return (uint16_t)((u.v >> 12) | u.v);
+	return
+		((HEX4_LOOKUP[src[0] & 0x1f]) << 12) |
+		((HEX4_LOOKUP[src[1] & 0x1f]) << 8) |
+		((HEX4_LOOKUP[src[2] & 0x1f]) << 4) |
+		((HEX4_LOOKUP[src[3] & 0x1f]) << 0);
 }
-
-static char const *HEX_DIGITS = "0123456789abcdef";
 
 attribute_nonnull attribute_alwaysinline
 static __inline__ void
 hex16_tostr(char *dest, uint16_t val)
 {
-	dest[0] = HEX_DIGITS[(val >> 12) & 0xf];
-	dest[1] = HEX_DIGITS[(val >> 8) & 0xf];
-	dest[2] = HEX_DIGITS[(val >> 4) & 0xf];
-	dest[3] = HEX_DIGITS[val & 0xf];
+	dest[0] = HEX4_DIGITS[(val >> 12) & 0xf];
+	dest[1] = HEX4_DIGITS[(val >> 8) & 0xf];
+	dest[2] = HEX4_DIGITS[(val >> 4) & 0xf];
+	dest[3] = HEX4_DIGITS[val & 0xf];
 }
 
-attribute_warnunused static int
+static int
 ensure_size(struct json_writer *__restrict w, size_t size)
 {
 	char *p;
@@ -222,34 +186,34 @@ ensure_size(struct json_writer *__restrict w, size_t size)
 	return 1;
 }
 
-attribute_warnunused attribute_nonnull json_node *
-json_get(json_node *__restrict node, char const *__restrict keystr)
+attribute_const attribute_nonnull struct json_node *
+json_get(struct json_node *__restrict node, char const *__restrict key)
 {
 	size_t keysize;
 
+	assert(json_obj == json_type(node));
+	assert(NULL != node);
 	if (0 == node->val.len)
 		return NULL;
-	/* if (json_isempty(node))
-		return NULL; */
 
-	keysize = strlen(keystr) + 1;
+	keysize = strlen(key) + 1;
 
-	++node;
+	node = json_children(node);
 	do {
-		assert(node->keystr || !"BUG: Key is null");
-		if (0 == memcmp(node->keystr, keystr, keysize))
+		assert(node->key || !"BUG: Key is null");
+		if (0 == memcmp(node->key, key, keysize))
 			break;
 	} while (NULL != (node = json_next(node)));
 
 	return node;
 }
 
-attribute_warnunused attribute_nonnull attribute_returnsnonnull static char *
+attribute_nonnull attribute_returnsnonnull static char *
 parse_str(char *__restrict s)
 {
 	char *p;
 
-	for (p = ++s; s[0] != '"';) {
+	for (p = ++s; '"' != s[0];) {
 		if (s[0] != '\\') {
 			uint8_t nbytes = utf8_chrcpy(p, s);
 			p += nbytes, s += nbytes;
@@ -299,13 +263,13 @@ parse_str(char *__restrict s)
 			p += 1, s += 2;
 		}
 	}
-	/* Overwrite final `"'. */
-	*s++ = '\0';
-	return s;
+	/* Zero-terminate output. */
+	p[0] = '\0';
+	return s + 1/* Final ‘"’. */;
 }
 
 attribute_nonnull int
-json_parse(char *s, json_node *__restrict *__restrict pnodes,
+json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 		   size_t *__restrict pnnodes)
 {
 	uint8_t depth = 0;
@@ -316,7 +280,7 @@ json_parse(char *s, json_node *__restrict *__restrict pnodes,
 	size_t siblings[sizeof isobj * CHAR_BIT];
 
 	for (;;) {
-		json_node *node;
+		struct json_node *node;
 
 		++nodeidx;
 
@@ -333,30 +297,27 @@ json_parse(char *s, json_node *__restrict *__restrict pnodes,
 		}
 
 		node = &(*pnodes)[nodeidx];
-		node->keystr = NULL;
+		node->key = NULL;
 
 	parse_token:
 		while (json_iswhitespace(*s))
 			++s;
 
-		printf("#(%d/%d)%s\n", depth, (int)nodeidx, "");
 		switch (*s) {
 		case '"': {
-			int const isval = !(isobj & (1 << depth)) || NULL != node->keystr;
+			int const isval = !(isobj & (1 << depth)) || NULL != node->key;
 			node->sibltype = json_str;
 			if (isval)
 				node->val.str = s + 1;
 			else
-				node->keystr = s + 1;
+				node->key = s + 1;
 
 			s = parse_str(s);
 
 			/* >> (depth + 1); underflowed? */
 			if (isval) {
-				printf(" --val: %s\n", node->val.str);
 				break;
 			} else {
-				printf(" --key: %s\n", node->keystr);
 				while (*s++ != ':')
 					;
 				goto parse_token;
@@ -375,7 +336,6 @@ json_parse(char *s, json_node *__restrict *__restrict pnodes,
 			lengths[depth] = 0;
 			parents[depth] = nodeidx;
 			siblings[depth] = nodeidx + 1;
-			printf(">>> parents[%d] = %d\n", depth, (int)nodeidx);
 			s += 1;
 			continue;
 
@@ -383,10 +343,8 @@ json_parse(char *s, json_node *__restrict *__restrict pnodes,
 			isobj ^= (1 << depth);
 			/* Fall through. */
 		case ']':
-			printf("<<< parents[%d] = %d; ch=%d\n", depth, (int)parents[depth],
-				   (int)lengths[depth]);
 			(*pnodes)[parents[depth]].val.len =
-				lengths[depth] + !!(parents[depth] != nodeidx);
+				lengths[depth] + !!(parents[depth] != nodeidx - 1);
 			s += 1;
 			if (--depth == 0)
 				break;
@@ -405,11 +363,7 @@ json_parse(char *s, json_node *__restrict *__restrict pnodes,
 		case ',':
 			++lengths[depth];
 
-			printf("on depth %d %d->%d\n", depth, (int)siblings[depth],
-				   (int)nodeidx);
-
-			(*pnodes)[siblings[depth]].sibltype |= (nodeidx - siblings[depth])
-												   << 3;
+			(*pnodes)[siblings[depth]].sibltype |= (nodeidx - siblings[depth]) << 3;
 			siblings[depth] = nodeidx;
 
 			s += 1;
@@ -421,7 +375,6 @@ json_parse(char *s, json_node *__restrict *__restrict pnodes,
 			break;
 
 		default:
-			printf("--(num)\n");
 			node->sibltype = json_num;
 			node->val.num = strtod(s, &s);
 			break;
@@ -492,12 +445,9 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 
 	*p++ = '\"';
 	while (*s != '\0') {
-			printf("k %x\n", s[0]);
 		if (!ascii_iscntrl(s[0])) {
-			printf("c %x\n", *s);
 			if (!json_isspecial(s[0])) {
 				uint8_t const nbytes = utf8_chrcpy(p, s);
-				printf("kkk %d\n", nbytes);
 				p += nbytes, s += nbytes;
 				continue;
 			} else {
@@ -530,8 +480,56 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 	return 1;
 }
 
+int
+json_write_val(struct json_writer *__restrict w, struct json_node *node) {
+	enum json_node_type type = json_type(node);
+
+	/* TODO: Get rid of recursion. */
+	switch (type) {
+	case json_str:
+		return json_write_str(w, node->val.str);
+	case json_false:
+	case json_true:
+		return json_write_bool(w, type == json_true), 1;
+	case json_null:
+		return json_write_null(w), 1;
+	case json_num:
+		return json_write_num(w, node->val.num), 1;
+	case json_arr:
+		json_write_beginarr(w);
+		if (!json_isempty(node)) {
+			++node;
+			do {
+				if (!json_write_val(w, node))
+					return 0;
+			} while (NULL != (node = json_next(node)));
+		}
+		json_write_endarr(w);
+		return 1;
+	case json_obj:
+		json_write_beginobj(w);
+		if (!json_isempty(node)) {
+			++node;
+			do {
+				if (!json_write_key(w, node->key))
+					return 0;
+				if (!json_write_val(w, node))
+					return 0;
+			} while (NULL != (node = json_next(node)));
+		}
+		json_write_endobj(w);
+		return 1;
+	}
+
+#if defined(__GNUC__) || defined(__clang__)
+	__builtin_unreachable();
+#else
+	return 0;
+#endif
+}
+
 void
-json_debug(json_node *node, unsigned level)
+json_debug(struct json_node *node, unsigned level)
 {
 	if (NULL == node) {
 		printf("(null)\n");
@@ -539,9 +537,9 @@ json_debug(json_node *node, unsigned level)
 	}
 
 	do {
-		printf("%s%c%3d %s", "								  " + (32 - level),
+		printf("%*s%c%3d %s", level, "",
 			   "-+"[json_type(node) == json_obj || json_type(node) == json_arr],
-			   (unsigned)node->sibltype >> 3, node->keystr ? node->keystr : "");
+			   (unsigned)node->sibltype >> 3, node->key ? node->key : "");
 		switch (json_type(node)) {
 		case json_obj:
 		case json_arr:
@@ -551,14 +549,15 @@ json_debug(json_node *node, unsigned level)
 			}
 			break;
 		case json_num:
-			printf(":(num)%f\n", node->val.num);
+			printf(":%g\n", node->val.num);
 			break;
 		case json_str:
-			printf(":(str)%s\n", node->val.str);
+			printf(":\"%s\"\n", node->val.str);
 			break;
 		default:
-			printf("\n");
+			printf("other\n");
+			break;
 		}
 	} while ((node = json_next(node)));
 }
-/* vi:set ft=c noet ts=4 sw=4: */
+/* vi:set ft=c noet: */
