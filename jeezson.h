@@ -167,12 +167,12 @@ json_write_num(struct json_writer *__restrict w, double num)
 }
 
 static __inline__ void
-json_write_int(struct json_writer *__restrict w, unsigned long num)
+json_write_int(struct json_writer *__restrict w, long num)
 {
 	if (w->open < w->len)
 		json_write_lit(",");
 
-	w->len += sprintf(w->buf + w->len, "%lu", num);
+	w->len += sprintf(w->buf + w->len, "%ld", num);
 }
 
 static __inline__ void

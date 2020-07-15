@@ -141,7 +141,7 @@ TEST(parse_str) {
 }
 
 TEST(json_writer) {
-	struct json_writer w[0];
+	struct json_writer w[1];
 
 	json_writer_init(w);
 
@@ -159,8 +159,8 @@ TEST(json_writer) {
 		}
 
 		CASE(hungarian) {
-			json_write_str(w,"Ärvíztűrő \t tükörfúrógép.\n");
-			json_write_str(w,"\ntest");
+			json_write_str(w, "Ärvíztűrő \t tükörfúrógép.\n");
+			json_write_str(w, "\ntest");
 			json_writer_term(w);
 			assert_equal(w->buf, "\"Ärvíztűrő \\t tükörfúrógép.\\n\",\"\\ntest\"");
 		}
@@ -176,6 +176,7 @@ TEST(json_writer) {
 	json_write_beginarr(w);
 	json_write_str(w, "\xe0\xa4\xb9");
 	json_write_int(w, 7);
+	json_write_int(w, -123);
 	json_write_null(w);
 	json_write_num(w, 4.5);
 	json_write_endarr(w);
@@ -185,7 +186,7 @@ TEST(json_writer) {
 
 	json_writer_term(w);
 
-	assert_equal(w->buf, "{\"a\":true,\"b\":[[\"\xe0\xa4\xb9\",7,null,4.5]]}");
+	assert_equal(w->buf, "{\"a\":true,\"b\":[[\"\xe0\xa4\xb9\",7,-123,null,4.5]]}");
 
 	json_writer_free(w);
 
