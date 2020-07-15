@@ -126,9 +126,18 @@ json_writer_term(struct json_writer *__restrict w)
 	w->buf[w->len] = '\0';
 }
 
-void
-json_writer_free(struct json_writer *__restrict w);
+static __inline__ void
+json_writer_empty(struct json_writer *__restrict w)
+{
+	w->len = 0;
+	w->open = 0;
+}
 
+static __inline__ void
+json_writer_free(struct json_writer *__restrict w)
+{
+	free(w->buf);
+}
 
 #define json_write_lit(lit) \
 	do { \

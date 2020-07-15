@@ -400,12 +400,6 @@ json_writer_init(struct json_writer *__restrict w)
 	return ensure_size(w, 0);
 }
 
-void
-json_writer_free(struct json_writer *__restrict w)
-{
-	free(w->buf);
-}
-
 int
 json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 {
