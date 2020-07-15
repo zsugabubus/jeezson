@@ -7,7 +7,7 @@ bootstrap :
 	git submodule update --init --recursive
 
 check :
-	$(MAKE) -C tests
+	$(MAKE) -C t
 
 clean :
 	$(RM) jeezson.a
