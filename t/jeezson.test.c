@@ -188,6 +188,5 @@ TEST(json_writer) {
 
 	assert_equal(w->buf, "{\"a\":true,\"b\":[[\"\xe0\xa4\xb9\",7,-123,null,4.5]]}");
 
-	json_writer_free(w);
-
+	json_writer_uninit(w);
 }

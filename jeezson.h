@@ -134,7 +134,7 @@ json_writer_empty(struct json_writer *__restrict w)
 }
 
 static __inline__ void
-json_writer_free(struct json_writer *__restrict w)
+json_writer_uninit(struct json_writer *__restrict w)
 {
 	free(w->buf);
 }
@@ -244,7 +244,7 @@ json_tostring(struct json_node *node)
 		return NULL;
 
 	if (!json_write_val(w, node)) {
-		json_writer_free(w);
+		json_writer_uninit(w);
 		return NULL;
 	}
 
