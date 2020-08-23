@@ -17,6 +17,7 @@
  */
 #include <assert.h>
 #include <limits.h>
+#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -278,6 +279,11 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 	size_t parents[sizeof isobj * CHAR_BIT];
 	size_t lengths[sizeof isobj * CHAR_BIT];
 	size_t siblings[sizeof isobj * CHAR_BIT];
+	locale_t origloc = (locale_t)0;
+	static locale_t cloc = (locale_t)0;
+
+	if ((locale_t)0 == cloc)
+		cloc = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
 
 	for (;;) {
 		struct json_node *node;
@@ -289,9 +295,10 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 			void *p;
 
 			/* FIXME: Increment only if allocation was successful. */
-			if (NULL ==
-				(p = realloc(*pnodes, (*pnnodes += 32) * sizeof **pnodes)))
+			if (NULL == (p = realloc(*pnodes, (*pnnodes += 32) * sizeof **pnodes))) {
+				uselocale(origloc);
 				return 0;
+			}
 
 			*pnodes = p;
 		}
@@ -305,12 +312,13 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 
 		switch (*s) {
 		case '"': {
-			int const isval = !(isobj & (1 << depth)) || NULL != node->key;
-			node->sibltype = json_str;
-			if (isval)
+			int const isval = !(isobj & ((size_t)1 << depth)) || NULL != node->key;
+			if (isval) {
+				node->sibltype = json_str;
 				node->val.str = s + 1;
-			else
+			} else {
 				node->key = s + 1;
+			}
 
 			s = parse_str(s);
 
@@ -332,7 +340,7 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 			isobj ^= (2 << depth);
 		init_container:
 			++depth;
-			assert(depth < 32);
+			assert(depth < sizeof isobj * CHAR_BIT);
 			lengths[depth] = 0;
 			parents[depth] = nodeidx;
 			siblings[depth] = nodeidx + 1;
@@ -341,10 +349,9 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 
 		case '}':
 			isobj ^= (1 << depth);
-			/* Fall through. */
+			/* fall through */
 		case ']':
-			(*pnodes)[parents[depth]].val.len =
-				lengths[depth] + !!(parents[depth] != nodeidx - 1);
+			(*pnodes)[parents[depth]].val.len = lengths[depth] + !!(parents[depth] != nodeidx - 1);
 			s += 1;
 			if (--depth == 0)
 				break;
@@ -375,15 +382,18 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 			break;
 
 		default:
+			if ((locale_t)0 == origloc)
+				origloc = uselocale(cloc);
 			node->sibltype = json_num;
 			node->val.num = strtod(s, &s);
 			break;
 		}
 
 		if (depth == 0)
-			return 1;
+			break;
 	}
 
+	(void)uselocale(origloc);
 	return 1;
 }
 
