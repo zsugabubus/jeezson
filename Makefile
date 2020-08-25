@@ -11,5 +11,6 @@ check :
 
 clean :
 	$(RM) jeezson.a
+	$(MAKE) -C t clean
 
 .PHONY: bootstrap check clean
