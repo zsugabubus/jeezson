@@ -57,14 +57,14 @@ json_parse(char *buf, struct json_node *__restrict *__restrict pnodes,
 #if defined(__GNUC__)
 __attribute__((const))
 #endif
-struct json_node *
-json_get(struct json_node *__restrict node, char const *__restrict keystr);
+struct json_node const *
+json_get(struct json_node const *__restrict node, char const *__restrict keystr);
 
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
 static __inline__ size_t
-json_sibl(struct json_node *__restrict node)
+json_sibl(struct json_node const *__restrict node)
 {
 	return node->sibltype >> 3;
 }
@@ -73,7 +73,7 @@ json_sibl(struct json_node *__restrict node)
 __attribute__((const, always_inline))
 #endif
 static __inline__ enum json_node_type
-json_type(struct json_node *__restrict node)
+json_type(struct json_node const *__restrict node)
 {
 	return node->sibltype & 0x7;
 }
@@ -81,8 +81,8 @@ json_type(struct json_node *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ struct json_node *
-json_next(struct json_node *__restrict node)
+static __inline__ struct json_node const *
+json_next(struct json_node const *__restrict node)
 {
 	return (json_sibl(node) > 0 ? node + json_sibl(node) : NULL);
 }
@@ -91,7 +91,7 @@ json_next(struct json_node *__restrict node)
 __attribute__((const, always_inline))
 #endif
 static __inline__ size_t
-json_len(struct json_node *__restrict node)
+json_len(struct json_node const *__restrict node)
 {
 	assert(json_obj == json_type(node) || json_arr == json_type(node));
 	return node->val.len;
@@ -101,7 +101,7 @@ json_len(struct json_node *__restrict node)
 __attribute__((const, always_inline))
 #endif
 static __inline__ int
-json_isempty(struct json_node *__restrict node)
+json_isempty(struct json_node const *__restrict node)
 {
 	return 0 == json_len(node);
 }
@@ -110,8 +110,8 @@ json_isempty(struct json_node *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ struct json_node *
-json_children(struct json_node *__restrict node)
+static __inline__ struct json_node const *
+json_children(struct json_node const *__restrict node)
 {
 	assert(!json_isempty(node));
 	return node + 1;
@@ -233,10 +233,10 @@ json_write_key(struct json_writer *__restrict w, char const *__restrict s)
 }
 
 int
-json_write_val(struct json_writer *__restrict w, struct json_node *value);
+json_write_val(struct json_writer *__restrict w, struct json_node const *value);
 
 static __inline__ char *
-json_tostring(struct json_node *node)
+json_tostring(struct json_node const *node)
 {
 	struct json_writer w[1];
 
@@ -256,7 +256,6 @@ json_tostring(struct json_node *node)
 #undef json_write_lit
 
 void
-json_debug(struct json_node *node, unsigned level);
+json_debug(struct json_node const *node, unsigned level);
 
 #endif
-/* vi:set ft=c noet ts=4 sw=4: */

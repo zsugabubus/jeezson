@@ -187,13 +187,12 @@ ensure_size(struct json_writer *__restrict w, size_t size)
 	return 1;
 }
 
-attribute_const attribute_nonnull struct json_node *
-json_get(struct json_node *__restrict node, char const *__restrict key)
+attribute_const attribute_nonnull struct json_node const *
+json_get(struct json_node const *__restrict node, char const *__restrict key)
 {
 	size_t keysize;
 
 	assert(json_obj == json_type(node));
-	assert(NULL != node);
 	if (0 == node->val.len)
 		return NULL;
 
@@ -201,7 +200,6 @@ json_get(struct json_node *__restrict node, char const *__restrict key)
 
 	node = json_children(node);
 	do {
-		assert(node->key || !"BUG: Key is null");
 		if (0 == memcmp(node->key, key, keysize))
 			break;
 	} while (NULL != (node = json_next(node)));
@@ -485,20 +483,24 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 }
 
 int
-json_write_val(struct json_writer *__restrict w, struct json_node *node) {
+json_write_val(struct json_writer *__restrict w, struct json_node const *node) {
 	enum json_node_type type = json_type(node);
 
 	/* TODO: Get rid of recursion. */
 	switch (type) {
 	case json_str:
 		return json_write_str(w, node->val.str);
+
 	case json_false:
 	case json_true:
 		return json_write_bool(w, type == json_true), 1;
+
 	case json_null:
 		return json_write_null(w), 1;
+
 	case json_num:
 		return json_write_num(w, node->val.num), 1;
+
 	case json_arr:
 		json_write_beginarr(w);
 		if (!json_isempty(node)) {
@@ -510,6 +512,7 @@ json_write_val(struct json_writer *__restrict w, struct json_node *node) {
 		}
 		json_write_endarr(w);
 		return 1;
+
 	case json_obj:
 		json_write_beginobj(w);
 		if (!json_isempty(node)) {
@@ -533,7 +536,7 @@ json_write_val(struct json_writer *__restrict w, struct json_node *node) {
 }
 
 void
-json_debug(struct json_node *node, unsigned level)
+json_debug(struct json_node const *node, unsigned level)
 {
 	if (NULL == node) {
 		printf("(null)\n");
@@ -564,4 +567,3 @@ json_debug(struct json_node *node, unsigned level)
 		}
 	} while ((node = json_next(node)));
 }
-/* vi:set ft=c noet: */
