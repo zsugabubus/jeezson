@@ -3,7 +3,7 @@
 #include "jeezson.h"
 #include "jeezson.c"
 
-SUITE_FILE
+SUITE()
 
 TEST(utf8_chrlen) {
 	expect_equal(utf8_chrlen('a'), 0);

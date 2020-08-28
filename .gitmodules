@@ -1,4 +1,3 @@
-[submodule "t/c1"]
+[submodule "c1"]
 	path = t/c1
 	url = https://github.com/zsugabubus/c1
-	branch = c1

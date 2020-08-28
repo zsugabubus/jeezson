@@ -1,16 +1,13 @@
 RM ?= rm -f
 
-run : check.out
+run : check
 	./$^
 
-check.out: ../jeezson.? c1/test.h c1/test.c *.c
+check : ../jeezson.? c1/test.h c1/test.c *.c
 	# -fsanitize=undefined,null
-	$(CC) -o $@ -g -Wall -ansi -Wno-format -ldl -O2 -Ic1 -I.. c1/test.h c1/test.c *.c
-
-debug : check.out
-	gdb run $^
+	$(CC) -o $@ -g -Wall -ansi -Wno-format -O2 -Ic1 -I.. c1/test.h c1/test.c *.c
 
 clean :
-	$(RM) check.out
+	$(RM) check
 
-.PHONY: run debug clean
+.PHONY: run clean
