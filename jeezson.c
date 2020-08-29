@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-/* #include <endian.h> */
 
 #include "jeezson.h"
 
@@ -50,7 +49,7 @@ static __inline__ uint8_t
 utf8_chrlen(char s)
 {
 	/*
-	 * Prefix			Number of bytes
+	 * Prefix               Number of bytes
 	 * --------------------------------
 	 * 0???xxxx  0 - 7	1
 	 * 110?xxxx  12-13	2
@@ -74,13 +73,13 @@ utf8_chrcpy(char *dest, char const *src)
 	switch (len) {
 	case 3:
 		dest[len - 3] = src[len - 3];
-		/* Fall through. */
+		/* fall through */
 	case 2:
 		dest[len - 2] = src[len - 2];
-		/* Fall through. */
+		/* fall through */
 	case 1:
 		dest[len - 1] = src[len - 1];
-		/* Fall through. */
+		/* fall through */
 	default:
 		dest[len] = src[len];
 	}
@@ -176,7 +175,7 @@ ensure_size(struct json_writer *__restrict w, size_t size)
 	char *p;
 
 	size += 32 /*deepest depth*/ + 32 /*longest token:number*/ +
-			1 /*extra colon*/ + 1 /*nil*/;
+	        1 /*extra colon*/ + 1 /*nil*/;
 	if (size <= w->size)
 		return 1;
 
@@ -221,21 +220,27 @@ parse_str(char *__restrict s)
 			default:
 				p[0] = s[1];
 				break;
+
 			case 'b':
 				p[0] = '\b';
 				break;
+
 			case 'f':
 				p[0] = '\f';
 				break;
+
 			case 'n':
 				p[0] = '\n';
 				break;
+
 			case 'r':
 				p[0] = '\r';
 				break;
+
 			case 't':
 				p[0] = '\t';
 				break;
+
 			case 'u': {
 				char16_t high, low;
 				char32_t unicode;
@@ -247,7 +252,7 @@ parse_str(char *__restrict s)
 				if (high < 0xd800 || 0xdfff < high) {
 					unicode = high;
 				} else {
-					/* Handle an UTF-16 surrogate pair. */
+					/* an UTF-16 surrogate pair */
 					s += 2;
 					low = hex16_fromstr(s);
 					s += 4;
@@ -288,17 +293,17 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
 
 		++nodeidx;
 
-		/* TODO: Allocate more professionally. */
-		if (nodeidx >= *pnnodes) {
+		if (*pnnodes <= nodeidx) {
 			void *p;
+			/* increment size by golden ratio (~1.6) */
+			size_t nnodes = (*pnnodes * 8 / 5) + 1;
 
-			/* FIXME: Increment only if allocation was successful. */
-			if (NULL == (p = realloc(*pnodes, (*pnnodes += 32) * sizeof **pnodes))) {
+			if (NULL == (p = realloc(*pnodes, nnodes * sizeof **pnodes))) {
 				uselocale(origloc);
 				return 0;
 			}
-
 			*pnodes = p;
+			*pnnodes = nnodes;
 		}
 
 		node = &(*pnodes)[nodeidx];

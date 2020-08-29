@@ -15,8 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef JEEZJSON_H
-#define JEEZJSON_H
+#ifndef JEEZSON_H
+#define JEEZSON_H
 
 #include <stddef.h>
 #include <assert.h>
