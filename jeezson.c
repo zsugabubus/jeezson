@@ -267,9 +267,9 @@ parse_str(char *__restrict s)
 			p += 1, s += 2;
 		}
 	}
-	/* Zero-terminate output. */
+	/* zero-terminate output */
 	p[0] = '\0';
-	return s + 1/* Final ‘"’. */;
+	return s + 1/* final ‘"’ */;
 }
 
 attribute_nonnull int
@@ -420,7 +420,7 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 	char const *q;
 	size_t newlen;
 
-	/* Count how much bytes escaping will consume. */
+	/* count how much bytes escaping will consume */
 	newlen = w->len + 1/*[comma]*/ + 1/*apos*/ + 1/*apos*/;
 	for (q = s; *q != '\0'; ++q) {
 		if (ascii_iscntrl(q[0])) {
@@ -458,7 +458,7 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 				p += nbytes, s += nbytes;
 				continue;
 			} else {
-				/* Extra escaping is needed. */
+				/* extra escaping is needed */
 				p[0] = '\\';
 				p[1] = s[0];
 				p += 2;
