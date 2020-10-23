@@ -72,14 +72,11 @@ utf8_chrcpy(char *dest, char const *src)
 	/* TODO: Measure against `rep mov'. */
 	switch (len) {
 	case 3:
-		dest[len - 3] = src[len - 3];
-		/* fall through */
+		dest[len - 3] = src[len - 3]; /* fall through */
 	case 2:
-		dest[len - 2] = src[len - 2];
-		/* fall through */
+		dest[len - 2] = src[len - 2]; /* fall through */
 	case 1:
-		dest[len - 1] = src[len - 1];
-		/* fall through */
+		dest[len - 1] = src[len - 1]; /* fall through */
 	default:
 		dest[len] = src[len];
 	}
@@ -141,32 +138,32 @@ json_isspecial(char c)
 	return '"' == c || '\\' == c;
 }
 
-uint8_t const HEX4_LOOKUP[16 + 10] = {
-	0, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9
-};
-
-static char const *HEX4_DIGITS = "0123456789abcdef";
-
 attribute_nonnull attribute_alwaysinline
 static __inline__ uint16_t
 hex16_fromstr(char const *__restrict src)
 {
+	static uint8_t const LOOKUP[16 + 10] = {
+		0, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9
+	};
+
 	return
-		((HEX4_LOOKUP[src[0] & 0x1f]) << 12) |
-		((HEX4_LOOKUP[src[1] & 0x1f]) << 8) |
-		((HEX4_LOOKUP[src[2] & 0x1f]) << 4) |
-		((HEX4_LOOKUP[src[3] & 0x1f]) << 0);
+		((LOOKUP[src[0] % 32]) << 12) |
+		((LOOKUP[src[1] % 32]) << 8) |
+		((LOOKUP[src[2] % 32]) << 4) |
+		((LOOKUP[src[3] % 32]) << 0);
 }
 
 attribute_nonnull attribute_alwaysinline
 static __inline__ void
 hex16_tostr(char *dest, uint16_t val)
 {
-	dest[0] = HEX4_DIGITS[(val >> 12) & 0xf];
-	dest[1] = HEX4_DIGITS[(val >> 8) & 0xf];
-	dest[2] = HEX4_DIGITS[(val >> 4) & 0xf];
-	dest[3] = HEX4_DIGITS[val & 0xf];
+	static char const *const DIGITS = "0123456789abcdef";
+
+	dest[0] = DIGITS[(val >> 12) % 16];
+	dest[1] = DIGITS[(val >>  8) % 16];
+	dest[2] = DIGITS[(val >>  4) % 16];
+	dest[3] = DIGITS[ val        % 16];
 }
 
 static int
@@ -213,7 +210,7 @@ parse_str(char *__restrict s)
 
 	for (p = ++s; '"' != s[0];) {
 		if (s[0] != '\\') {
-			uint8_t nbytes = utf8_chrcpy(p, s);
+			uint8_t const nbytes = utf8_chrcpy(p, s);
 			p += nbytes, s += nbytes;
 		} else {
 			switch (s[1]) {
@@ -273,8 +270,7 @@ parse_str(char *__restrict s)
 }
 
 attribute_nonnull int
-json_parse(char *s, struct json_node *__restrict *__restrict pnodes,
-		   size_t *__restrict pnnodes)
+json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__restrict pnnodes)
 {
 	uint8_t depth = 0;
 	size_t nodeidx = -1;
