@@ -18,8 +18,10 @@
 #ifndef JEEZSON_H
 #define JEEZSON_H
 
-#include <stddef.h>
 #include <assert.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 enum json_node_type {
 	json_false,
