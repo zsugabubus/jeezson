@@ -258,6 +258,6 @@ json_tostring(struct json_node const *node)
 #undef json_write_lit
 
 void
-json_debug(struct json_node const *node, unsigned level);
+json_dump(struct json_node const *node, FILE *stream);
 
 #endif

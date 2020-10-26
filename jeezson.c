@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <assert.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <locale.h>
 #include <stdint.h>
@@ -536,35 +537,67 @@ json_write_val(struct json_writer *__restrict w, struct json_node const *node) {
 #endif
 }
 
-void
-json_debug(struct json_node const *node, unsigned level)
+static void
+json_dump_internal(struct json_node const *node, unsigned level, FILE *stream)
 {
+	enum json_node_type type;
+
 	if (NULL == node) {
-		printf("(null)\n");
+		fprintf(stream, "(null)\n");
 		return;
 	}
 
-	do {
-		printf("%*s%c%3d %s", level, "",
-			   "-+"[json_type(node) == json_obj || json_type(node) == json_arr],
-			   (unsigned)node->sibltype >> 3, node->key ? node->key : "");
-		switch (json_type(node)) {
-		case json_obj:
-		case json_arr:
-			printf(":\n");
-			if (node->val.len > 0) {
-				json_debug(node + 1, level + 1);
-			}
-			break;
-		case json_num:
-			printf(":%g\n", node->val.num);
-			break;
-		case json_str:
-			printf(":\"%s\"\n", node->val.str);
-			break;
-		default:
-			printf("other\n");
-			break;
+	type = json_type(node);
+
+	fprintf(stream, "%*s", level, "");
+
+	if (node->key)
+		fprintf(stream, "%s=", node->key);
+
+	switch (type) {
+	case json_obj:
+	case json_arr:
+		fprintf(stream, "%c\n", json_obj == type ? '{' : '[');
+		if (!json_isempty(node)) {
+			node = json_children(node);
+			do
+				json_dump_internal(node, level + 1, stream);
+			while ((node = json_next(node)));
 		}
-	} while ((node = json_next(node)));
+		fprintf(stream, "%*s%c\n", level, "", json_obj == type ? '}' : ']');
+		break;
+
+	case json_num:
+	{
+		int64_t const int_num = node->val.num;
+		if (node->val.num == int_num)
+			fprintf(stream, "%"PRId64"\n", int_num);
+		else
+			fprintf(stream, "%g\n", node->val.num);
+	}
+		break;
+
+	case json_str:
+		fprintf(stream, "\"%s\"\n", node->val.str);
+		break;
+
+	case json_true:
+	case json_false:
+		fprintf(stream, "%s\n", json_true == type ? "true" : "false");
+		break;
+
+	case json_null:
+		fprintf(stream, "null\n");
+		break;
+
+	default:
+		fprintf(stream, "(bug)\n");
+		break;
+	}
+}
+
+void
+json_dump(struct json_node const *node, FILE *stream)
+{
+	json_dump_internal(node, 0, stream);
 }
