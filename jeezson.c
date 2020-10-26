@@ -183,7 +183,7 @@ ensure_size(struct json_writer *__restrict w, size_t size)
 	return 1;
 }
 
-attribute_const attribute_nonnull struct json_node const *
+attribute_const attribute_nonnull struct json_node *
 json_get(struct json_node const *__restrict node, char const *__restrict key)
 {
 	size_t keysize;
@@ -200,7 +200,7 @@ json_get(struct json_node const *__restrict node, char const *__restrict key)
 			break;
 	} while (NULL != (node = json_next(node)));
 
-	return node;
+	return (struct json_node *)node;
 }
 
 attribute_nonnull attribute_returnsnonnull static char *

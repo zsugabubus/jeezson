@@ -59,7 +59,7 @@ json_parse(char *buf, struct json_node *__restrict *__restrict pnodes,
 #if defined(__GNUC__)
 __attribute__((const))
 #endif
-struct json_node const *
+struct json_node *
 json_get(struct json_node const *__restrict node, char const *__restrict keystr);
 
 #if defined(__GNUC__)
@@ -83,10 +83,10 @@ json_type(struct json_node const *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ struct json_node const *
+static __inline__ struct json_node *
 json_next(struct json_node const *__restrict node)
 {
-	return (json_sibl(node) > 0 ? node + json_sibl(node) : NULL);
+	return (struct json_node *)(json_sibl(node) > 0 ? node + json_sibl(node) : NULL);
 }
 
 #if defined(__GNUC__)
@@ -112,11 +112,11 @@ json_isempty(struct json_node const *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ struct json_node const *
+static __inline__ struct json_node *
 json_children(struct json_node const *__restrict node)
 {
 	assert(!json_isempty(node));
-	return node + 1;
+	return (struct json_node *)(node + 1);
 }
 
 int
