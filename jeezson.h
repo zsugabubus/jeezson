@@ -119,6 +119,15 @@ json_children(struct json_node const *__restrict node)
 	return (struct json_node *)(node + 1);
 }
 
+#if defined(__GNUC__)
+__attribute__((const, always_inline))
+#endif
+static __inline__ struct json_node *
+json_first(struct json_node const *__restrict node)
+{
+	return (struct json_node *)(node && !json_isempty(node) ? json_children(node) : NULL);
+}
+
 int
 json_writer_init(struct json_writer *__restrict w);
 
