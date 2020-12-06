@@ -36,9 +36,9 @@ enum json_node_type {
 struct json_node {
 	size_t sibltype;
 
-	char *key;
+	char const *key;
 	union {
-		char *str;
+		char const *str;
 		double num;
 		size_t len;
 	} val;
