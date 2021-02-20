@@ -201,19 +201,18 @@ attribute_const attribute_nonnull
 struct json_node *
 json_get(struct json_node const *__restrict node, char const *__restrict key)
 {
-	size_t keysize;
+	size_t key_size;
 
-	assert(json_obj == json_type(node));
-	if (0 == node->val.len)
+	if (json_isempty(node))
 		return NULL;
 
-	keysize = strlen(key) + 1;
+	key_size = strlen(key) + 1;
 
 	node = json_children(node);
-	do {
-		if (0 == memcmp(node->key, key, keysize))
+	do
+		if (!memcmp(node->key, key, key_size))
 			break;
-	} while (NULL != (node = json_next(node)));
+	while (NULL != (node = json_next(node)));
 
 	return (struct json_node *)node;
 }
