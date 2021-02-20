@@ -20,8 +20,11 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+extern unsigned json_dump_max_level;
 
 enum json_node_type {
 	json_false,

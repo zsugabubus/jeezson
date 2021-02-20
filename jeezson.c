@@ -26,6 +26,8 @@
 
 #include "jeezson.h"
 
+unsigned json_dump_max_level = UINT_MAX;
+
 #if defined(__GNUC__) || defined(__clang__)
 #define attribute_nonnull __attribute__((nonnull))
 #define attribute_returnsnonnull __attribute__((returns_nonnull))
@@ -575,14 +577,20 @@ json_dump_internal(struct json_node const *node, unsigned level, FILE *stream)
 	switch (type) {
 	case json_obj:
 	case json_arr:
-		fprintf(stream, "%c\n", json_obj == type ? '{' : '[');
+		fputc(json_obj == type ? '{' : '[', stream);
 		if (!json_isempty(node)) {
-			node = json_children(node);
-			do
-				json_dump_internal(node, level + 1, stream);
-			while ((node = json_next(node)));
+			if (level < json_dump_max_level) {
+				fputc('\n', stream);
+				node = json_children(node);
+				do
+					json_dump_internal(node, level + 1, stream);
+				while ((node = json_next(node)));
+				fprintf(stream, "%*s", level, "");
+			} else {
+				fprintf(stream, " %zu children ", json_len(node));
+			}
 		}
-		fprintf(stream, "%*s%c\n", level, "", json_obj == type ? '}' : ']');
+		fprintf(stream, "%c\n", json_obj == type ? '}' : ']');
 		break;
 
 	case json_num:
