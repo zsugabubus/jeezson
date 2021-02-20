@@ -186,7 +186,7 @@ json_write_num(struct json_writer *__restrict w, double num)
 	if (w->open < w->len)
 		json_write_lit(",");
 
-	w->len += sprintf(w->buf + w->len, "%.15g", num);
+	w->len += (size_t)sprintf(w->buf + w->len, "%.15g", num);
 }
 
 static __inline__ void
@@ -195,7 +195,7 @@ json_write_int(struct json_writer *__restrict w, long num)
 	if (w->open < w->len)
 		json_write_lit(",");
 
-	w->len += sprintf(w->buf + w->len, "%ld", num);
+	w->len += (size_t)sprintf(w->buf + w->len, "%ld", num);
 }
 
 static __inline__ void

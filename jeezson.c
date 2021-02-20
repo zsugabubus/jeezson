@@ -67,7 +67,8 @@ utf8_chrlen(char s)
 #undef B
 }
 
-attribute_nonnull static __inline__ uint8_t
+attribute_nonnull
+static __inline__ uint8_t
 utf8_chrcpy(char *dest, char const *src)
 {
 	uint8_t const len = utf8_chrlen(*src);
@@ -86,7 +87,8 @@ utf8_chrcpy(char *dest, char const *src)
 	return len + 1;
 }
 
-attribute_nonnull static uint8_t
+attribute_nonnull
+static uint8_t
 utf32_toutf8(char *__restrict dest, char32_t codepoint)
 {
 	if (codepoint <= 0x7f) {
@@ -195,7 +197,8 @@ ensure_size(struct json_writer *__restrict w, size_t size)
 	return 1;
 }
 
-attribute_const attribute_nonnull struct json_node *
+attribute_const attribute_nonnull
+struct json_node *
 json_get(struct json_node const *__restrict node, char const *__restrict key)
 {
 	size_t keysize;
@@ -215,7 +218,8 @@ json_get(struct json_node const *__restrict node, char const *__restrict key)
 	return (struct json_node *)node;
 }
 
-attribute_nonnull attribute_returnsnonnull static char *
+attribute_nonnull attribute_returnsnonnull
+static char *
 parse_str(char *__restrict s)
 {
 	char *p;
@@ -290,7 +294,8 @@ parse_str(char *__restrict s)
 	return s + 1/* final ‘"’ */;
 }
 
-attribute_nonnull int
+attribute_nonnull
+int
 json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__restrict pnnodes)
 {
 	uint8_t depth = 0;
