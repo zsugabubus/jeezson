@@ -139,32 +139,41 @@ json_isspecial(char c)
 	return '"' == c || '\\' == c;
 }
 
+static uint8_t const HEX_LOOKUP[16 + 10] = {
+	0, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9
+};
+
+static char const *const HEX_DIGITS = "0123456789abcdef";
+
+attribute_nonnull attribute_alwaysinline
+static __inline__ uint8_t
+hex8_fromstr(char const *__restrict src)
+{
+	return
+		((HEX_LOOKUP[src[0] % 32]) << 4) |
+		((HEX_LOOKUP[src[1] % 32]) << 0);
+}
+
 attribute_nonnull attribute_alwaysinline
 static __inline__ uint16_t
 hex16_fromstr(char const *__restrict src)
 {
-	static uint8_t const LOOKUP[16 + 10] = {
-		0, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9
-	};
-
 	return
-		((LOOKUP[src[0] % 32]) << 12) |
-		((LOOKUP[src[1] % 32]) << 8) |
-		((LOOKUP[src[2] % 32]) << 4) |
-		((LOOKUP[src[3] % 32]) << 0);
+		((HEX_LOOKUP[src[0] % 32]) << 12) |
+		((HEX_LOOKUP[src[1] % 32]) << 8) |
+		((HEX_LOOKUP[src[2] % 32]) << 4) |
+		((HEX_LOOKUP[src[3] % 32]) << 0);
 }
 
 attribute_nonnull attribute_alwaysinline
 static __inline__ void
 hex16_tostr(char *dest, uint16_t val)
 {
-	static char const *const DIGITS = "0123456789abcdef";
-
-	dest[0] = DIGITS[(val >> 12) % 16];
-	dest[1] = DIGITS[(val >>  8) % 16];
-	dest[2] = DIGITS[(val >>  4) % 16];
-	dest[3] = DIGITS[ val        % 16];
+	dest[0] = HEX_DIGITS[(val >> 12) % 16];
+	dest[1] = HEX_DIGITS[(val >>  8) % 16];
+	dest[2] = HEX_DIGITS[(val >>  4) % 16];
+	dest[3] = HEX_DIGITS[ val        % 16];
 }
 
 static int
@@ -239,7 +248,16 @@ parse_str(char *__restrict s)
 				p[0] = '\t';
 				break;
 
-			case 'u': {
+			case 'x':
+			{
+				s += 2;
+				*p = hex8_fromstr(s);
+				p += 1, s += 2;
+			}
+				continue;
+
+			case 'u':
+			{
 				char16_t high, low;
 				char32_t unicode;
 
@@ -250,7 +268,7 @@ parse_str(char *__restrict s)
 				if (high < 0xd800 || 0xdfff < high) {
 					unicode = high;
 				} else {
-					/* an UTF-16 surrogate pair */
+					/* UTF-16 surrogate pair. */
 					s += 2;
 					low = hex16_fromstr(s);
 					s += 4;
@@ -259,8 +277,8 @@ parse_str(char *__restrict s)
 				}
 
 				p += utf32_toutf8(p, unicode);
-				continue;
 			}
+				continue;
 			}
 			p += 1, s += 2;
 		}

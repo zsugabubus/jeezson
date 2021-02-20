@@ -132,7 +132,7 @@ TEST(parse_str) {
 	parse_str_test("\\t", "\t");
 	parse_str_test("0\\f12", "0\f12");
 	parse_str_test("0\\t12\\n\\t\\b345", "0\t12\n\t\b345");
-	parse_str_test("\xed\x95\x9cx\t\xf0\x90\x8d\x88", "\xed\x95\x9cx\t\xf0\x90\x8d\x88");
+	parse_str_test("\\xed\\x95\\x9cx\t\\xf0\\x90\\x8d\\x88", "\xed\x95\x9cx\t\xf0\x90\x8d\x88");
 	parse_str_test("\\u0020", " ");
 	parse_str_test("\\u20acdc", "\xe2\x82\xac""dc");
 	parse_str_test("Ärvíztűrő tükörfúrógép.", "Ärvíztűrő tükörfúrógép.");
