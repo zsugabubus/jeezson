@@ -67,8 +67,8 @@ typedef struct JSONNode {
 
 typedef struct JSONWriter {
 	char *buf;
-	size_t size;
-	size_t alloced;
+	size_t buf_size;
+	size_t buf_alloced;
 	size_t open;
 	int status;
 } JSONWriter;
@@ -141,7 +141,7 @@ static __inline__ void
 json_writer_reset(JSONWriter *__restrict w)
 {
 	w->status = 0;
-	w->size = 0;
+	w->buf_size = 0;
 	w->open = 0;
 }
 

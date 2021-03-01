@@ -437,10 +437,10 @@ json_writer_ensure_size(JSONWriter *__restrict w, size_t size)
 	        32 /* Longest possible token (number). */ +
 	        1 /* An extra colon. */ +
 	        1 /* Terminating NUL. */;
-	if (size <= w->alloced)
+	if (size <= w->buf_alloced)
 		return 1;
 
-	if (!(p = realloc(w->buf, (w->alloced = size)))) {
+	if (!(p = realloc(w->buf, (w->buf_alloced = size)))) {
 		if (0 <= w->status)
 			w->status = -ENOMEM;
 		return 0;
@@ -459,21 +459,21 @@ json_writer_init(JSONWriter *__restrict w)
 
 #define json_write_lit(lit) \
 	do { \
-		memcpy(w->buf + w->size, lit, sizeof(lit) - 1); \
-		w->size += strlen(lit); \
+		memcpy(w->buf + w->buf_size, lit, sizeof(lit) - 1); \
+		w->buf_size += strlen(lit); \
 	} while (0)
 
 static void
 json_write_comma(JSONWriter *__restrict w)
 {
-	if (w->open < w->size)
+	if (w->open < w->buf_size)
 		json_write_lit(",");
 }
 
 void
 json_write_null(JSONWriter *__restrict w)
 {
-	if (!json_writer_ensure_size(w, w->size))
+	if (!json_writer_ensure_size(w, w->buf_size))
 		return;
 
 	json_write_comma(w);
@@ -483,7 +483,7 @@ json_write_null(JSONWriter *__restrict w)
 void
 json_write_bool(JSONWriter *__restrict w, int b)
 {
-	if (!json_writer_ensure_size(w, w->size))
+	if (!json_writer_ensure_size(w, w->buf_size))
 		return;
 
 	json_write_comma(w);
@@ -497,23 +497,23 @@ json_write_bool(JSONWriter *__restrict w, int b)
 void
 json_write_num(JSONWriter *__restrict w, double num)
 {
-	if (!json_writer_ensure_size(w, w->size))
+	if (!json_writer_ensure_size(w, w->buf_size))
 		return;
 
 	json_write_comma(w);
 
-	w->size += (size_t)sprintf(w->buf + w->size, "%.15g", num);
+	w->buf_size += (size_t)sprintf(w->buf + w->buf_size, "%.15g", num);
 }
 
 void
 json_write_int(JSONWriter *__restrict w, long num)
 {
-	if (!json_writer_ensure_size(w, w->size))
+	if (!json_writer_ensure_size(w, w->buf_size))
 		return;
 
 	json_write_comma(w);
 
-	w->size += (size_t)sprintf(w->buf + w->size, "%ld", num);
+	w->buf_size += (size_t)sprintf(w->buf + w->buf_size, "%ld", num);
 }
 
 void
@@ -521,7 +521,7 @@ json_write_beginarr(JSONWriter *__restrict w)
 {
 	json_write_comma(w);
 	json_write_lit("[");
-	w->open = w->size;
+	w->open = w->buf_size;
 }
 
 void
@@ -536,7 +536,7 @@ json_write_beginobj(JSONWriter *__restrict w)
 {
 	json_write_comma(w);
 	json_write_lit("{");
-	w->open = w->size;
+	w->open = w->buf_size;
 }
 
 void
@@ -551,7 +551,7 @@ json_write_key(JSONWriter *__restrict w, char const *__restrict s)
 {
 	json_write_str(w, s);
 	json_write_lit(":");
-	w->open = w->size;
+	w->open = w->buf_size;
 }
 
 void
@@ -563,7 +563,7 @@ json_write_str(JSONWriter *__restrict w, char const *__restrict s)
 
 	json_write_comma(w);
 
-	new_size = w->size + 1 /* '"' */ + 1 /* '"' */;
+	new_size = w->buf_size + 1 /* '"' */ + 1 /* '"' */;
 	for (q = s; *q; ++q)
 		if (ascii_iscntrl(q[0]))
 			switch (q[0]) {
@@ -585,7 +585,7 @@ json_write_str(JSONWriter *__restrict w, char const *__restrict s)
 	if (!json_writer_ensure_size(w, new_size))
 		return;
 
-	p = w->buf + w->size;
+	p = w->buf + w->buf_size;
 
 	*p++ = '\"';
 	while (*s) {
@@ -619,7 +619,7 @@ json_write_str(JSONWriter *__restrict w, char const *__restrict s)
 	}
 
 	*p++ = '\"';
-	w->size = p - w->buf;
+	w->buf_size = p - w->buf;
 }
 
 void
@@ -745,7 +745,7 @@ json_get_string(JSONNode const *node)
 		return NULL;
 	}
 
-	w->buf[w->size] = '\0';
+	w->buf[w->buf_size] = '\0';
 
 	return w->buf;
 }
