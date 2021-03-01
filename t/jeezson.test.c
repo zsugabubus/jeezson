@@ -2,6 +2,7 @@
 
 #include "jeezson.h"
 #include "jeezson.c"
+#include <stdbool.h>
 
 SUITE()
 
@@ -86,32 +87,32 @@ TEST(ascii_iscntrl) {
 }
 
 TEST(parse + tostring) {
-	struct json_node *nodes = NULL;
+	JSONNode *nodes = NULL;
 	size_t nnodes = 0;
 
 	CASE(empty nested arrays) {
 		expect_true(json_parse("[]", &nodes, &nnodes));
-		expect_equal(nodes[0].val.len, 0);
-		expect_equal(json_tostring(nodes), "[]");
+		expect_equal(json_length(&nodes[0]), 0);
+		expect_equal(json_get_string(nodes), "[]");
 
 		expect_true(json_parse("[ [[[]   ]]]", &nodes, &nnodes));
-		expect_equal(nodes[0].val.len, 1);
-		expect_equal(nodes[1].val.len, 1);
-		expect_equal(nodes[2].val.len, 1);
-		expect_equal(nodes[3].val.len, 0);
-		expect_equal(json_tostring(nodes), "[[[[]]]]");
+		expect_equal(json_length(&nodes[0]), 1);
+		expect_equal(json_length(&nodes[1]), 1);
+		expect_equal(json_length(&nodes[2]), 1);
+		expect_equal(json_length(&nodes[3]), 0);
+		expect_equal(json_get_string(nodes), "[[[[]]]]");
 	}
 
 	CASE(empty map) {
 		expect_true(json_parse("{}", &nodes, &nnodes));
-		expect_equal(nodes[0].val.len, 0);
-		expect_equal(json_tostring(nodes), "{}");
+		expect_equal(json_length(&nodes[0]), 0);
+		expect_equal(json_get_string(nodes), "{}");
 	}
 
 	CASE(short arrays) {
 		expect_true(json_parse(" [      \n42 \n\n,\n true\n\n \n\n]\n  ", &nodes, &nnodes));
-		expect_equal(nodes[0].val.len, 2);
-		expect_equal(json_tostring(nodes), "[42,true]");
+		expect_equal(json_length(&nodes[0]), 2);
+		expect_equal(json_get_string(nodes), "[42,true]");
 	}
 
 }
@@ -141,29 +142,38 @@ TEST(parse_str) {
 }
 
 TEST(json_writer) {
-	struct json_writer w[1];
+	JSONWriter w[1];
 
 	json_writer_init(w);
 
 	CASE(json_write_str) {
 		CASE(control escape) {
 			json_write_str(w, "a\tbcd");
-			json_writer_term(w);
+			w->buf[w->size] = '\0';
 			assert_equal(w->buf, "\"a\\tbcd\"");
 		}
 
 		CASE(multibyte) {
 			json_write_str(w, "\xe0\xa4\xb9");
-			json_writer_term(w);
+			w->buf[w->size] = '\0';
 			assert_equal(w->buf, "\"\xe0\xa4\xb9\"");
 		}
 
 		CASE(hungarian) {
 			json_write_str(w, "Ärvíztűrő \t tükörfúrógép.\n");
 			json_write_str(w, "\ntest");
-			json_writer_term(w);
+			w->buf[w->size] = '\0';
 			assert_equal(w->buf, "\"Ärvíztűrő \\t tükörfúrógép.\\n\",\"\\ntest\"");
 		}
+	}
+
+	CASE(json_write_ints) {
+		json_write(w, 123456789); json_write(w, 123456789); json_write(w, 123456789); json_write(w, 123456789); json_write(w, 123456789);
+		json_write(w, 123456789); json_write(w, 123456789); json_write(w, 123456789); json_write(w, 123456789); json_write(w, 123456789);
+		w->buf[w->size] = '\0';
+		assert_equal(w->buf,
+				"123456789,123456789,123456789,123456789,123456789,"
+				"123456789,123456789,123456789,123456789,123456789");
 	}
 
 	json_write_beginobj(w);
@@ -184,9 +194,9 @@ TEST(json_writer) {
 
 	json_write_endobj(w);
 
-	json_writer_term(w);
+	w->buf[w->size] = '\0';
 
 	assert_equal(w->buf, "{\"a\":true,\"b\":[[\"\xe0\xa4\xb9\",7,-123,null,4.5]]}");
 
-	json_writer_uninit(w);
+	json_writer_free(w);
 }

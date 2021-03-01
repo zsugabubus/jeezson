@@ -1,10 +1,10 @@
 RM ?= rm -f
 
 jeezson.a : jeezson.c jeezson.h
-	$(CC) -c -o $@ $<
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 check :
-	$(MAKE) -C t
+	CFLAGS=-std=c99 $(MAKE) -C t
 
 clean :
 	$(RM) jeezson.a

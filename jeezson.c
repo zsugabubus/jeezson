@@ -1,6 +1,6 @@
 /**
  * jeezson - JSON parser and generator
- * Copyright (C) 2020  zsugabubus
+ * Copyright (C) 2020-2021  zsugabubus
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <assert.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <locale.h>
@@ -26,7 +27,16 @@
 
 #include "jeezson.h"
 
+#if __STDC_VERSION__ < 201112L
+# define U(field) u.field
+#else
+# define U(field) field
+#endif
+
+enum { JSON_DEPTH_MAX = sizeof(size_t) * CHAR_BIT };
+
 unsigned json_dump_max_level = UINT_MAX;
+unsigned json_flags = 0;
 
 #if defined(__GNUC__) || defined(__clang__)
 #define attribute_nonnull __attribute__((nonnull))
@@ -126,7 +136,7 @@ attribute_const attribute_alwaysinline
 static __inline__ int
 ascii_iscntrl(char c)
 {
-	return (unsigned char)c <= 0x1fU || (unsigned char)c == 0x7fU/*del*/;
+	return (unsigned char)c <= 0x1fU || (unsigned char)c == 0x7fU /* DEL */;
 }
 
 attribute_const attribute_alwaysinline
@@ -136,11 +146,16 @@ json_iswhitespace(char c)
 	return ' ' == c || '\t' == c || '\r' == c || '\n' == c;
 }
 
+/**
+ * @return whether character should be '\' escaped inside a string.
+ */
 attribute_const attribute_alwaysinline
 static __inline__ int
 json_isspecial(char c)
 {
-	return '"' == c || '\\' == c;
+	return '"' == c || '\\' == c ||
+	       /* So it can be embedded inside HTML. */
+	       '/' == c;
 }
 
 static uint8_t const HEX_LOOKUP[16 + 10] = {
@@ -180,30 +195,13 @@ hex16_tostr(char *dest, uint16_t val)
 	dest[3] = HEX_DIGITS[ val        % 16];
 }
 
-static int
-ensure_size(struct json_writer *__restrict w, size_t size)
-{
-	char *p;
-
-	size += 32 /*deepest depth*/ + 32 /*longest token:number*/ +
-	        1 /*extra colon*/ + 1 /*nil*/;
-	if (size <= w->size)
-		return 1;
-
-	if (NULL == (p = realloc(w->buf, (w->size = size))))
-		return 0;
-	w->buf = p;
-
-	return 1;
-}
-
 attribute_const attribute_nonnull
-struct json_node *
-json_get(struct json_node const *__restrict node, char const *__restrict key)
+JSONNode *
+json_get(JSONNode const *__restrict node, char const *__restrict key)
 {
 	size_t key_size;
 
-	if (json_isempty(node))
+	if (!json_length(node))
 		return NULL;
 
 	key_size = strlen(key) + 1;
@@ -212,9 +210,9 @@ json_get(struct json_node const *__restrict node, char const *__restrict key)
 	do
 		if (!memcmp(node->key, key, key_size))
 			break;
-	while (NULL != (node = json_next(node)));
+	while ((node = json_next(node)));
 
-	return (struct json_node *)node;
+	return (JSONNode *)node;
 }
 
 attribute_nonnull attribute_returnsnonnull
@@ -288,43 +286,46 @@ parse_str(char *__restrict s)
 			p += 1, s += 2;
 		}
 	}
-	/* zero-terminate output */
+
+	/* Zero-terminate output. */
 	p[0] = '\0';
-	return s + 1/* final ‘"’ */;
+	return s + 1 /* Final '"'. */;
 }
 
 attribute_nonnull
-int
-json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__restrict pnnodes)
+size_t
+json_parse(char *s, JSONNode *__restrict *__restrict pnodes, size_t *__restrict pnb_nodes)
 {
+	static locale_t cloc = (locale_t)0;
+
+	char *src = s;
 	uint8_t depth = 0;
 	size_t nodeidx = -1;
 	size_t isobj = 0;
-	size_t parents[sizeof isobj * CHAR_BIT];
-	size_t lengths[sizeof isobj * CHAR_BIT];
-	size_t siblings[sizeof isobj * CHAR_BIT];
+	size_t parents[JSON_DEPTH_MAX];
+	size_t lengths[JSON_DEPTH_MAX];
+	size_t siblings[JSON_DEPTH_MAX];
 	locale_t origloc = (locale_t)0;
-	static locale_t cloc = (locale_t)0;
 
 	if ((locale_t)0 == cloc)
 		cloc = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
 
 	for (;;) {
-		struct json_node *node;
+		JSONNode *node;
 
 		++nodeidx;
 
-		if (*pnnodes <= nodeidx) {
+		if (*pnb_nodes <= nodeidx) {
 			void *p;
 			/* increment size by golden ratio (~1.6) */
-			size_t nnodes = (*pnnodes * 8 / 5) + 1;
+			size_t nb_nodes = (*pnb_nodes * 8 / 5) + 1;
 
-			if (NULL == (p = realloc(*pnodes, nnodes * sizeof **pnodes))) {
+			if (!(p = realloc(*pnodes, nb_nodes * sizeof **pnodes))) {
 				uselocale(origloc);
 				return 0;
 			}
 			*pnodes = p;
-			*pnnodes = nnodes;
+			*pnb_nodes = nb_nodes;
 		}
 
 		node = &(*pnodes)[nodeidx];
@@ -336,10 +337,10 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__r
 
 		switch (*s) {
 		case '"': {
-			int const isval = !(isobj & ((size_t)1 << depth)) || NULL != node->key;
+			int const isval = !(isobj & ((size_t)1 << depth)) || node->key;
 			if (isval) {
-				node->sibltype = json_str;
-				node->val.str = s + 1;
+				node->sibltype = JSONT_STRING;
+				node->U(str) = s + 1;
 			} else {
 				node->key = s + 1;
 			}
@@ -357,10 +358,10 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__r
 		}
 
 		case '[':
-			node->sibltype = json_arr;
+			node->sibltype = JSONT_ARRAY;
 			goto init_container;
 		case '{':
-			node->sibltype = json_obj;
+			node->sibltype = JSONT_OBJECT;
 			isobj ^= (2 << depth);
 		init_container:
 			++depth;
@@ -375,19 +376,19 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__r
 			isobj ^= (1 << depth);
 			/* fall through */
 		case ']':
-			(*pnodes)[parents[depth]].val.len = lengths[depth] + !!(parents[depth] != nodeidx - 1);
+			(*pnodes)[parents[depth]].U(len) = lengths[depth] + !!(parents[depth] != nodeidx - 1);
 			s += 1;
 			if (--depth == 0)
 				break;
 			goto parse_token;
 
 		case 'f':
-			node->sibltype = json_false;
+			node->sibltype = JSONT_FALSE;
 			s += strlen("false");
 			break;
 
 		case 't':
-			node->sibltype = json_true;
+			node->sibltype = JSONT_TRUE;
 			s += strlen("true");
 			break;
 
@@ -401,15 +402,21 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__r
 			goto parse_token;
 
 		case 'n':
-			node->sibltype = json_null;
+			node->sibltype = JSONT_NULL;
 			s += strlen("null");
 			break;
 
 		default:
-			if ((locale_t)0 == origloc)
-				origloc = uselocale(cloc);
-			node->sibltype = json_num;
-			node->val.num = strtod(s, &s);
+			node->sibltype = JSONT_NUMBER;
+			if (!(json_flags & JSON_FLAG_SKIP_NUMBERS)) {
+				if ((locale_t)0 == origloc)
+					origloc = uselocale(cloc);
+				node->U(num) = strtod(s, &s);
+			} else {
+				node->U(str) = s;
+				while (++s, (('0' <= *s && *s <= '9') || '.' == *s || '-' == *s || 'e' == *s));
+				*s = '\0';
+			}
 			break;
 		}
 
@@ -418,58 +425,168 @@ json_parse(char *s, struct json_node *__restrict *__restrict pnodes, size_t *__r
 	}
 
 	(void)uselocale(origloc);
-	return 1;
+	return s - src;
 }
 
 static int
-ensure_size(struct json_writer *__restrict w, size_t newlen);
-
-int
-json_writer_init(struct json_writer *__restrict w)
+json_writer_ensure_size(JSONWriter *__restrict w, size_t size)
 {
-	w->buf = NULL;
-	w->len = 0;
-	w->size = 0;
-	w->open = 0;
-	return ensure_size(w, 0);
+	char *p;
+
+	/* Reserve space for closing brackets and one more token. */
+	size += JSON_DEPTH_MAX +
+	        32 /* Longest possible token (number). */ +
+	        1 /* An extra colon. */ +
+	        1 /* Terminating NUL. */;
+	if (size <= w->alloced)
+		return 1;
+
+	if (!(p = realloc(w->buf, (w->alloced = size)))) {
+		if (0 <= w->status)
+			w->status = -ENOMEM;
+		return 0;
+	}
+	w->buf = p;
+
+	return 1;
 }
 
-int
-json_write_str(struct json_writer *__restrict w, char const *__restrict s)
+void
+json_writer_init(JSONWriter *__restrict w)
+{
+	memset(w, 0, sizeof *w);
+	json_writer_ensure_size(w, 0);
+}
+
+#define json_write_lit(lit) \
+	do { \
+		memcpy(w->buf + w->size, lit, sizeof(lit) - 1); \
+		w->size += strlen(lit); \
+	} while (0)
+
+static void
+json_write_comma(JSONWriter *__restrict w)
+{
+	if (w->open < w->size)
+		json_write_lit(",");
+}
+
+void
+json_write_null(JSONWriter *__restrict w)
+{
+	if (!json_writer_ensure_size(w, w->size))
+		return;
+
+	json_write_comma(w);
+	json_write_lit("null");
+}
+
+void
+json_write_bool(JSONWriter *__restrict w, int b)
+{
+	if (!json_writer_ensure_size(w, w->size))
+		return;
+
+	json_write_comma(w);
+
+	if (b)
+		json_write_lit("true");
+	else
+		json_write_lit("false");
+}
+
+void
+json_write_num(JSONWriter *__restrict w, double num)
+{
+	if (!json_writer_ensure_size(w, w->size))
+		return;
+
+	json_write_comma(w);
+
+	w->size += (size_t)sprintf(w->buf + w->size, "%.15g", num);
+}
+
+void
+json_write_int(JSONWriter *__restrict w, long num)
+{
+	if (!json_writer_ensure_size(w, w->size))
+		return;
+
+	json_write_comma(w);
+
+	w->size += (size_t)sprintf(w->buf + w->size, "%ld", num);
+}
+
+void
+json_write_beginarr(JSONWriter *__restrict w)
+{
+	json_write_comma(w);
+	json_write_lit("[");
+	w->open = w->size;
+}
+
+void
+json_write_endarr(JSONWriter *__restrict w)
+{
+	json_write_lit("]");
+	w->open = 0;
+}
+
+void
+json_write_beginobj(JSONWriter *__restrict w)
+{
+	json_write_comma(w);
+	json_write_lit("{");
+	w->open = w->size;
+}
+
+void
+json_write_endobj(JSONWriter *__restrict w)
+{
+	json_write_lit("}");
+	w->open = 0;
+}
+
+void
+json_write_key(JSONWriter *__restrict w, char const *__restrict s)
+{
+	json_write_str(w, s);
+	json_write_lit(":");
+	w->open = w->size;
+}
+
+void
+json_write_str(JSONWriter *__restrict w, char const *__restrict s)
 {
 	char *p;
 	char const *q;
-	size_t newlen;
+	size_t new_size;
 
-	/* count how much bytes escaping will consume */
-	newlen = w->len + 1/*[comma]*/ + 1/*apos*/ + 1/*apos*/;
-	for (q = s; *q != '\0'; ++q) {
-		if (ascii_iscntrl(q[0])) {
+	json_write_comma(w);
+
+	new_size = w->size + 1 /* '"' */ + 1 /* '"' */;
+	for (q = s; *q; ++q)
+		if (ascii_iscntrl(q[0]))
 			switch (q[0]) {
 			case '\b':
 			case '\t':
 			case '\n':
 			case '\f':
 			case '\r':
-				newlen += 2;
+				new_size += 2;
 				break;
 			default:
-				newlen += 6;
+				new_size += 6;
 				break;
 			}
-		} else if (json_isspecial(q[0])) {
-			newlen += 2;
-		}
-	}
+		else if (json_isspecial(q[0]))
+			new_size += 2;
 
-	newlen += q - s;
-	if (!ensure_size(w, newlen))
-		return 0;
+	new_size += q - s;
+	if (!json_writer_ensure_size(w, new_size))
+		return;
 
-	p = w->buf + w->len;
-
-	if (w->open < w->len)
-		*p++ = ',';
+	p = w->buf + w->size;
 
 	*p++ = '\"';
 	while (*s != '\0') {
@@ -479,7 +596,6 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 				p += nbytes, s += nbytes;
 				continue;
 			} else {
-				/* extra escaping is needed */
 				p[0] = '\\';
 				p[1] = s[0];
 				p += 2;
@@ -504,69 +620,56 @@ json_write_str(struct json_writer *__restrict w, char const *__restrict s)
 	}
 
 	*p++ = '\"';
-	w->len = p - w->buf;
-	return 1;
+	w->size = p - w->buf;
 }
 
-int
-json_write_val(struct json_writer *__restrict w, struct json_node const *node) {
-	enum json_node_type type = json_type(node);
+void
+json_write_value(JSONWriter *__restrict w, JSONNode const *value)
+{
+	enum JSONNodeType type = json_type(value);
+	JSONNode *child __attribute__((unused));
 
 	/* TODO: Get rid of recursion. */
 	switch (type) {
-	case json_str:
-		return json_write_str(w, node->val.str);
+	case JSONT_FALSE:
+	case JSONT_TRUE:
+		json_write_bool(w, JSONT_TRUE == type);
+		break;
 
-	case json_false:
-	case json_true:
-		return json_write_bool(w, type == json_true), 1;
+	case JSONT_NULL:
+		json_write_null(w);
+		break;
 
-	case json_null:
-		return json_write_null(w), 1;
+	case JSONT_STRING:
+		json_write_str(w, value->U(str));
+		break;
 
-	case json_num:
-		return json_write_num(w, node->val.num), 1;
+	case JSONT_NUMBER:
+		json_write_num(w, value->U(num));
+		break;
 
-	case json_arr:
+	case JSONT_ARRAY:
 		json_write_beginarr(w);
-		if (!json_isempty(node)) {
-			++node;
-			do {
-				if (!json_write_val(w, node))
-					return 0;
-			} while (NULL != (node = json_next(node)));
-		}
+		json_each(child, value)
+			json_write_value(w, child);
 		json_write_endarr(w);
-		return 1;
+		break;
 
-	case json_obj:
+	case JSONT_OBJECT:
 		json_write_beginobj(w);
-		if (!json_isempty(node)) {
-			++node;
-			do {
-				if (!json_write_key(w, node->key))
-					return 0;
-				if (!json_write_val(w, node))
-					return 0;
-			} while (NULL != (node = json_next(node)));
-		}
+		json_each(child, value)
+			json_write_key(w, child->key), json_write_value(w, child);
 		json_write_endobj(w);
-		return 1;
+		break;
 	}
-
-#if defined(__GNUC__) || defined(__clang__)
-	__builtin_unreachable();
-#else
-	return 0;
-#endif
 }
 
 static void
-json_dump_internal(struct json_node const *node, unsigned level, FILE *stream)
+json_dump_internal(JSONNode const *node, unsigned level, FILE *stream)
 {
-	enum json_node_type type;
+	enum JSONNodeType type;
 
-	if (NULL == node) {
+	if (!node) {
 		fprintf(stream, "(null)\n");
 		return;
 	}
@@ -579,10 +682,10 @@ json_dump_internal(struct json_node const *node, unsigned level, FILE *stream)
 		fprintf(stream, "%s=", node->key);
 
 	switch (type) {
-	case json_obj:
-	case json_arr:
-		fputc(json_obj == type ? '{' : '[', stream);
-		if (!json_isempty(node)) {
+	case JSONT_OBJECT:
+	case JSONT_ARRAY:
+		fputc(JSONT_OBJECT == type ? '{' : '[', stream);
+		if (json_length(node)) {
 			if (level < json_dump_max_level) {
 				fputc('\n', stream);
 				node = json_children(node);
@@ -591,43 +694,63 @@ json_dump_internal(struct json_node const *node, unsigned level, FILE *stream)
 				while ((node = json_next(node)));
 				fprintf(stream, "%*s", level, "");
 			} else {
-				fprintf(stream, " %zu children ", json_len(node));
+				fprintf(stream, " %zu children ", json_length(node));
 			}
 		}
-		fprintf(stream, "%c\n", json_obj == type ? '}' : ']');
+		fprintf(stream, "%c\n", JSONT_OBJECT == type ? '}' : ']');
 		break;
 
-	case json_num:
-	{
-		int64_t const int_num = node->val.num;
-		if (node->val.num == int_num)
-			fprintf(stream, "%"PRId64"\n", int_num);
-		else
-			fprintf(stream, "%g\n", node->val.num);
-	}
+	case JSONT_NUMBER:
+		if (!(json_flags & JSON_FLAG_SKIP_NUMBERS)) {
+			int64_t const int_num = node->U(num);
+			if (node->U(num) == int_num)
+				fprintf(stream, "%"PRId64"\n", int_num);
+			else
+				fprintf(stream, "%g\n", node->U(num));
+			break;
+		} else {
+			fprintf(stream, "%s\n", node->U(str));
+		}
+		break;
+	case JSONT_STRING:
+		fprintf(stream, "\"%s\"\n", node->U(str));
 		break;
 
-	case json_str:
-		fprintf(stream, "\"%s\"\n", node->val.str);
+	case JSONT_TRUE:
+	case JSONT_FALSE:
+		fprintf(stream, "%s\n", JSONT_TRUE == type ? "true" : "false");
 		break;
 
-	case json_true:
-	case json_false:
-		fprintf(stream, "%s\n", json_true == type ? "true" : "false");
-		break;
-
-	case json_null:
+	case JSONT_NULL:
 		fprintf(stream, "null\n");
 		break;
 
 	default:
-		fprintf(stream, "(bug)\n");
-		break;
+		abort();
 	}
 }
 
 void
-json_dump(struct json_node const *node, FILE *stream)
+json_dump(JSONNode const *node, FILE *stream)
 {
 	json_dump_internal(node, 0, stream);
 }
+
+char *
+json_get_string(JSONNode const *node)
+{
+	JSONWriter w[1];
+
+	json_writer_init(w);
+	json_write_value(w, node);
+
+	if (w->status < 0) {
+		json_writer_free(w);
+		return NULL;
+	}
+
+	w->buf[w->size] = '\0';
+
+	return w->buf;
+}
+

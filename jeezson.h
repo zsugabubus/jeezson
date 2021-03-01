@@ -25,60 +25,70 @@
 #include <string.h>
 
 extern unsigned json_dump_max_level;
+extern unsigned json_flags;
 
-enum json_node_type {
-	json_false,
-	json_true,
-	json_null,
-	json_str,
-	json_num,
-	json_arr,
-	json_obj
+#define JSON_FLAG_SKIP_NUMBERS 1
+
+#if __STDC_VERSION__ >= 199901L
+# define json_each(child, node) \
+	for (JSONNode *child = json_first(node); \
+	     child; \
+	     child = json_next(child))
+#else
+# define json_each(child, node) \
+	for (child = json_first(node); \
+	     child; \
+	     child = json_next(child))
+#endif
+
+enum JSONNodeType {
+	JSONT_FALSE,
+	JSONT_TRUE,
+	JSONT_NULL,
+	JSONT_STRING,
+	JSONT_NUMBER,
+	JSONT_ARRAY,
+	JSONT_OBJECT
 };
 
-struct json_node {
+typedef struct JSONNode {
 	size_t sibltype;
 
 	char const *key;
 	union {
-		char const *str;
-		double num;
-		size_t len;
-	} val;
-};
+		char const *str; /* If JSONT_STRING. */
+		double num; /* If JSONT_NUMBER. */
+		size_t len; /* If JSONT_ARRAY || JSONT_OBJECT. */
+	}
+#if __STDC_VERSION__ < 201112L
+		u
+#endif
+	;
+} JSONNode;
 
-struct json_writer {
+typedef struct JSONWriter {
 	char *buf;
-	size_t len;
 	size_t size;
+	size_t alloced;
 	size_t open;
-	/* TODO(?): size_t depth. */
-};
+	int status;
+} JSONWriter;
 
-int
-json_parse(char *buf, struct json_node *__restrict *__restrict pnodes,
-		   size_t *__restrict pnnodes);
+/**
+ * @return number of parsed bytes
+ */
+size_t json_parse(char *buf, JSONNode *__restrict *__restrict pnodes, size_t *__restrict pnb_nodes);
 
 #if defined(__GNUC__)
 __attribute__((const))
 #endif
-struct json_node *
-json_get(struct json_node const *__restrict node, char const *__restrict keystr);
+JSONNode *json_get(JSONNode const *__restrict node, char const *__restrict keystr);
 
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ size_t
-json_sibl(struct json_node const *__restrict node)
-{
-	return node->sibltype >> 3;
-}
-
-#if defined(__GNUC__)
-__attribute__((const, always_inline))
-#endif
-static __inline__ enum json_node_type
-json_type(struct json_node const *__restrict node)
+static __inline__ enum JSONNodeType
+json_type(JSONNode const *__restrict node)
 {
 	return node->sibltype & 0x7;
 }
@@ -86,190 +96,92 @@ json_type(struct json_node const *__restrict node)
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ struct json_node *
-json_next(struct json_node const *__restrict node)
+static __inline__ JSONNode *
+json_next(JSONNode const *__restrict node)
 {
-	return (struct json_node *)(json_sibl(node) > 0 ? node + json_sibl(node) : NULL);
+	size_t next_sibling = node->sibltype >> 3;
+	return (JSONNode *)(0 < next_sibling ? node + next_sibling : NULL);
 }
 
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
 static __inline__ size_t
-json_len(struct json_node const *__restrict node)
+json_length(JSONNode const *__restrict node)
 {
-	assert(json_obj == json_type(node) || json_arr == json_type(node));
-	return node->val.len;
+	assert(JSONT_OBJECT == json_type(node) || JSONT_ARRAY == json_type(node));
+	return node->
+#if __STDC_VERSION__ < 201112L
+		u.
+#endif
+		len;
 }
 
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ int
-json_isempty(struct json_node const *__restrict node)
+static __inline__ JSONNode *
+json_children(JSONNode const *__restrict node)
 {
-	return 0 == json_len(node);
-}
-
-/* TODO: Maybe rename. */
-#if defined(__GNUC__)
-__attribute__((const, always_inline))
-#endif
-static __inline__ struct json_node *
-json_children(struct json_node const *__restrict node)
-{
-	assert(!json_isempty(node));
-	return (struct json_node *)(node + 1);
+	assert(json_length(node));
+	return (JSONNode *)(node + 1);
 }
 
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
 #endif
-static __inline__ struct json_node *
-json_first(struct json_node const *__restrict node)
+static __inline__ JSONNode *
+json_first(JSONNode const *__restrict node)
 {
-	return (struct json_node *)(node && !json_isempty(node) ? json_children(node) : NULL);
+	return (JSONNode *)(node && json_length(node) ? json_children(node) : NULL);
 }
 
-int
-json_writer_init(struct json_writer *__restrict w);
+void json_writer_init(JSONWriter *__restrict w);
 
 static __inline__ void
-json_writer_term(struct json_writer *__restrict w)
+json_writer_reset(JSONWriter *__restrict w)
 {
-	w->buf[w->len] = '\0';
-}
-
-static __inline__ void
-json_writer_empty(struct json_writer *__restrict w)
-{
-	w->len = 0;
+	w->status = 0;
+	w->size = 0;
 	w->open = 0;
 }
 
 static __inline__ void
-json_writer_uninit(struct json_writer *__restrict w)
+json_writer_free(JSONWriter *__restrict w)
 {
 	free(w->buf);
 }
 
-#define json_write_lit(lit) \
-	do { \
-		memcpy(w->buf + w->len, lit, strlen(lit) * sizeof(char)); \
-		w->len += strlen(lit); \
-	} while (0)
+void json_write_null(JSONWriter *__restrict w);
+void json_write_bool(JSONWriter *__restrict w, int b);
+void json_write_num(JSONWriter *__restrict w, double num);
+void json_write_int(JSONWriter *__restrict w, long num);
+void json_write_str(JSONWriter *__restrict w, char const *__restrict s);
+void json_write_value(JSONWriter *__restrict w, JSONNode const *value);
+void json_write_beginarr(JSONWriter *__restrict w);
+void json_write_endarr(JSONWriter *__restrict w);
+void json_write_beginobj(JSONWriter *__restrict w);
+void json_write_endobj(JSONWriter *__restrict w);
+void json_write_key(JSONWriter *__restrict w, char const *__restrict s);
+#define json_write(w, x) _Generic(x, \
+	bool: json_write_bool, \
+	signed char: json_write_int, \
+	signed short: json_write_int, \
+	signed int: json_write_int, \
+	signed long: json_write_int, \
+	unsigned char: json_write_int, \
+	unsigned short: json_write_int, \
+	unsigned int: json_write_int, \
+	unsigned long: json_write_int, \
+	float: json_write_num, \
+	double: json_write_num, \
+	long double: json_write_num, \
+	char *: json_write_str \
+)(w, x)
+#define json_write_entry(w, key, value) (json_write_key(w, key), json_write(w, value))
 
-static __inline__ void
-json_write_null(struct json_writer *__restrict w)
-{
-	if (w->open < w->len)
-		json_write_lit(",");
+char *json_get_string(JSONNode const *node);
 
-	json_write_lit("null");
-}
-
-static __inline__ void
-json_write_bool(struct json_writer *__restrict w, int b)
-{
-	if (w->open < w->len)
-		json_write_lit(",");
-
-	if (b)
-		json_write_lit("true");
-	else
-		json_write_lit("false");
-}
-
-static __inline__ void
-json_write_num(struct json_writer *__restrict w, double num)
-{
-	if (w->open < w->len)
-		json_write_lit(",");
-
-	w->len += (size_t)sprintf(w->buf + w->len, "%.15g", num);
-}
-
-static __inline__ void
-json_write_int(struct json_writer *__restrict w, long num)
-{
-	if (w->open < w->len)
-		json_write_lit(",");
-
-	w->len += (size_t)sprintf(w->buf + w->len, "%ld", num);
-}
-
-static __inline__ void
-json_write_beginarr(struct json_writer *__restrict w)
-{
-	if (w->open < w->len)
-		json_write_lit(",");
-
-	json_write_lit("[");
-	w->open = w->len;
-}
-
-static __inline__ void
-json_write_endarr(struct json_writer *__restrict w)
-{
-	json_write_lit("]");
-	w->open = 0;
-}
-
-static __inline__ void
-json_write_beginobj(struct json_writer *__restrict w)
-{
-	if (w->open < w->len)
-		json_write_lit(",");
-
-	json_write_lit("{");
-	w->open = w->len;
-}
-
-static __inline__ void
-json_write_endobj(struct json_writer *__restrict w)
-{
-	json_write_lit("}");
-	w->open = 0;
-}
-
-int
-json_write_str(struct json_writer *__restrict w, char const *__restrict s);
-
-static __inline__ int
-json_write_key(struct json_writer *__restrict w, char const *__restrict s)
-{
-	if (!json_write_str(w, s))
-		return 0;
-	json_write_lit(":");
-	w->open = w->len;
-
-	return 1;
-}
-
-int
-json_write_val(struct json_writer *__restrict w, struct json_node const *value);
-
-static __inline__ char *
-json_tostring(struct json_node const *node)
-{
-	struct json_writer w[1];
-
-	if (!json_writer_init(w))
-		return NULL;
-
-	if (!json_write_val(w, node)) {
-		json_writer_uninit(w);
-		return NULL;
-	}
-
-	json_writer_term(w);
-
-	return w->buf;
-}
-
-#undef json_write_lit
-
-void
-json_dump(struct json_node const *node, FILE *stream);
+void json_dump(JSONNode const *node, FILE *stream);
 
 #endif
