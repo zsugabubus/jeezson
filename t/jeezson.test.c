@@ -91,11 +91,11 @@ TEST(parse + tostring) {
 	size_t nnodes = 0;
 
 	CASE(empty nested arrays) {
-		expect_true(json_parse("[]", &nodes, &nnodes));
+		expect_true(json_parse("[]", &nodes, &nnodes, 0));
 		expect_equal(json_length(&nodes[0]), 0);
 		expect_equal(json_get_string(nodes), "[]");
 
-		expect_true(json_parse("[ [[[]   ]]]", &nodes, &nnodes));
+		expect_true(json_parse("[ [[[]   ]]]", &nodes, &nnodes, 0));
 		expect_equal(json_length(&nodes[0]), 1);
 		expect_equal(json_length(&nodes[1]), 1);
 		expect_equal(json_length(&nodes[2]), 1);
@@ -104,13 +104,13 @@ TEST(parse + tostring) {
 	}
 
 	CASE(empty map) {
-		expect_true(json_parse("{}", &nodes, &nnodes));
+		expect_true(json_parse("{}", &nodes, &nnodes, 0));
 		expect_equal(json_length(&nodes[0]), 0);
 		expect_equal(json_get_string(nodes), "{}");
 	}
 
 	CASE(short arrays) {
-		expect_true(json_parse(" [      \n42 \n\n,\n true\n\n \n\n]\n  ", &nodes, &nnodes));
+		expect_true(json_parse(" [      \n42 \n\n,\n true\n\n \n\n]\n  ", &nodes, &nnodes, 0));
 		expect_equal(json_length(&nodes[0]), 2);
 		expect_equal(json_get_string(nodes), "[42,true]");
 	}
@@ -123,7 +123,7 @@ TEST(parse_str) {
 #define parse_str_test(jsonstr, expstr) do { \
 	str = malloc(1 + sizeof jsonstr + 1); \
 	strcpy(str, "\"" jsonstr "\""); \
-	expect_equal(parse_str(str) - str, sizeof jsonstr + 1); \
+	expect_equal(json_parse_str(str) - str, sizeof jsonstr + 1); \
 	++str; \
 	expect_equal(str, expstr); \
 } while (0)

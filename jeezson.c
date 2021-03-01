@@ -36,22 +36,23 @@
 enum { JSON_DEPTH_MAX = sizeof(size_t) * CHAR_BIT };
 
 unsigned json_dump_max_level = UINT_MAX;
-unsigned json_flags = 0;
 
 #if defined(__GNUC__) || defined(__clang__)
-#define attribute_nonnull __attribute__((nonnull))
-#define attribute_returnsnonnull __attribute__((returns_nonnull))
+# define attribute_nonnull __attribute__((nonnull))
+# define attribute_returnsnonnull __attribute__((returns_nonnull))
+# define likely(x) __builtin_expect(!!(x), 1)
+# define unlikely(x) likely(!x)
 #else
-#define attribute_nonnull
-#define attribute_returnsnonnull
+# define attribute_nonnull
+# define attribute_returnsnonnull
 #endif
 
 #if defined(__GNUC__)
-#define attribute_alwaysinline __attribute__((always_inline))
-#define attribute_const __attribute__((const))
+# define attribute_alwaysinline __attribute__((always_inline))
+# define attribute_const __attribute__((const))
 #else
-#define attribute_alwaysinline
-#define attribute_const
+# define attribute_alwaysinline
+# define attribute_const
 #endif
 
 typedef uint32_t char32_t;
@@ -64,10 +65,10 @@ utf8_chrlen(char s)
 	/*
 	 * Prefix               Number of bytes
 	 * --------------------------------
-	 * 0???xxxx  0 - 7	1
-	 * 110?xxxx  12-13	2
-	 * 1110xxxx  14-14	3
-	 * 1111xxxx  15-15	4
+	 * 0???xxxx  0 - 7      1
+	 * 110?xxxx  12-13      2
+	 * 1110xxxx  14-14      3
+	 * 1111xxxx  15-15      4
 	 *
 	 * */
 #define B(v, n) ((v - 1) << (n * 2))
@@ -137,13 +138,6 @@ static __inline__ int
 ascii_iscntrl(char c)
 {
 	return (unsigned char)c <= 0x1fU || (unsigned char)c == 0x7fU /* DEL */;
-}
-
-attribute_const attribute_alwaysinline
-static __inline__ int
-json_iswhitespace(char c)
-{
-	return ' ' == c || '\t' == c || '\r' == c || '\n' == c;
 }
 
 /**
@@ -217,15 +211,15 @@ json_get(JSONNode const *__restrict node, char const *__restrict key)
 
 attribute_nonnull attribute_returnsnonnull
 static char *
-parse_str(char *__restrict s)
+json_parse_str(char *__restrict s)
 {
-	char *p;
+	char *p = ++s;
 
-	for (p = ++s; '"' != s[0];) {
-		if (s[0] != '\\') {
-			uint8_t const nbytes = utf8_chrcpy(p, s);
-			p += nbytes, s += nbytes;
-		} else {
+	for (;;) {
+		size_t n = strcspn(s, "\\\"");
+		memmove(p, s, n);
+		p += n, s += n;
+		if (*s == '\\') {
 			switch (s[1]) {
 			default:
 				p[0] = s[1];
@@ -284,101 +278,105 @@ parse_str(char *__restrict s)
 				continue;
 			}
 			p += 1, s += 2;
+		} else {
+			*p = '\0';
+			return s + 1;
 		}
 	}
-
-	/* Zero-terminate output. */
-	p[0] = '\0';
-	return s + 1 /* Final '"'. */;
 }
 
 attribute_nonnull
 size_t
-json_parse(char *s, JSONNode *__restrict *__restrict pnodes, size_t *__restrict pnb_nodes)
+json_parse(char *buf, JSONNode *__restrict *__restrict pnodes, size_t *__restrict pnb_nodes, unsigned flags)
 {
 	static locale_t cloc = (locale_t)0;
 
-	char *src = s;
+	char *s = buf;
 	uint8_t depth = 0;
-	size_t nodeidx = -1;
-	size_t isobj = 0;
+	size_t index = 0;
+	size_t is_object = 0;
 	size_t parents[JSON_DEPTH_MAX];
 	size_t lengths[JSON_DEPTH_MAX];
 	size_t siblings[JSON_DEPTH_MAX];
 	locale_t origloc = (locale_t)0;
 
+	JSONNode *nodes = *pnodes;
+	size_t nb_nodes = *pnb_nodes;
+
 	if ((locale_t)0 == cloc)
 		cloc = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
 
-	for (;;) {
+	for (;; ++index) {
 		JSONNode *node;
 
-		++nodeidx;
+		if (nb_nodes <= index) {
+			nb_nodes = (nb_nodes * 8 / 5 /* Golden Ratio. */) + 128;
 
-		if (*pnb_nodes <= nodeidx) {
-			void *p;
-			/* increment size by golden ratio (~1.6) */
-			size_t nb_nodes = (*pnb_nodes * 8 / 5) + 1;
-
-			if (!(p = realloc(*pnodes, nb_nodes * sizeof **pnodes))) {
+			if (!(nodes = realloc(nodes, nb_nodes * sizeof **pnodes))) {
 				uselocale(origloc);
 				return 0;
 			}
-			*pnodes = p;
+
+			*pnodes = nodes;
 			*pnb_nodes = nb_nodes;
 		}
 
-		node = &(*pnodes)[nodeidx];
+		node = &nodes[index];
 		node->key = NULL;
 
 	parse_token:
-		while (json_iswhitespace(*s))
-			++s;
-
 		switch (*s) {
-		case '"': {
-			int const isval = !(isobj & ((size_t)1 << depth)) || node->key;
-			if (isval) {
+		case ' ':
+		case '\t':
+		case '\r':
+		case '\n':
+			++s;
+			goto parse_token;
+
+		case '"':
+		{
+			int const is_value = !(is_object & ((size_t)1 << depth)) || node->key;
+			if (is_value) {
 				node->sibltype = JSONT_STRING;
 				node->U(str) = s + 1;
 			} else {
 				node->key = s + 1;
 			}
 
-			s = parse_str(s);
+			s = json_parse_str(s);
 
 			/* >> (depth + 1); underflowed? */
-			if (isval) {
+			if (is_value) {
 				break;
 			} else {
-				while (*s++ != ':')
-					;
+				while (':' != *s++);
 				goto parse_token;
 			}
 		}
 
 		case '[':
-			node->sibltype = JSONT_ARRAY;
-			goto init_container;
 		case '{':
-			node->sibltype = JSONT_OBJECT;
-			isobj ^= (2 << depth);
-		init_container:
+			if ('{' == *s) {
+				node->sibltype = JSONT_OBJECT;
+				is_object ^= (2 << depth);
+			} else {
+				node->sibltype = JSONT_ARRAY;
+			}
+
 			++depth;
-			assert(depth < sizeof isobj * CHAR_BIT);
 			lengths[depth] = 0;
-			parents[depth] = nodeidx;
-			siblings[depth] = nodeidx + 1;
+			parents[depth] = index;
+			siblings[depth] = index + 1;
 			s += 1;
 			continue;
 
 		case '}':
-			isobj ^= (1 << depth);
-			/* fall through */
+			is_object ^= (1 << depth);
+			/* FALL THROUGH */
 		case ']':
-			(*pnodes)[parents[depth]].U(len) = lengths[depth] + !!(parents[depth] != nodeidx - 1);
+			nodes[parents[depth]].U(len) = lengths[depth] + !!(parents[depth] != index - 1);
 			s += 1;
-			if (--depth == 0)
+			if (!--depth)
 				break;
 			goto parse_token;
 
@@ -395,8 +393,8 @@ json_parse(char *s, JSONNode *__restrict *__restrict pnodes, size_t *__restrict 
 		case ',':
 			++lengths[depth];
 
-			(*pnodes)[siblings[depth]].sibltype |= (nodeidx - siblings[depth]) << 3;
-			siblings[depth] = nodeidx;
+			nodes[siblings[depth]].sibltype |= (index - siblings[depth]) << 3;
+			siblings[depth] = index;
 
 			s += 1;
 			goto parse_token;
@@ -407,25 +405,26 @@ json_parse(char *s, JSONNode *__restrict *__restrict pnodes, size_t *__restrict 
 			break;
 
 		default:
-			node->sibltype = JSONT_NUMBER;
-			if (!(json_flags & JSON_FLAG_SKIP_NUMBERS)) {
+			if (!(flags & JSON_FLAG_NO_NUMBERS)) {
 				if ((locale_t)0 == origloc)
 					origloc = uselocale(cloc);
+				node->sibltype = JSONT_NUMBER;
 				node->U(num) = strtod(s, &s);
 			} else {
+				node->sibltype = JSONT_STRING;
 				node->U(str) = s;
 				while (++s, (('0' <= *s && *s <= '9') || '.' == *s || '-' == *s || 'e' == *s));
-				*s = '\0';
 			}
 			break;
 		}
 
-		if (depth == 0)
+		if (!depth)
 			break;
 	}
 
-	(void)uselocale(origloc);
-	return s - src;
+	if ((locale_t)0 != origloc)
+		(void)uselocale(origloc);
+	return s - buf;
 }
 
 static int
@@ -589,7 +588,7 @@ json_write_str(JSONWriter *__restrict w, char const *__restrict s)
 	p = w->buf + w->size;
 
 	*p++ = '\"';
-	while (*s != '\0') {
+	while (*s) {
 		if (!ascii_iscntrl(s[0])) {
 			if (!json_isspecial(s[0])) {
 				uint8_t const nbytes = utf8_chrcpy(p, s);
@@ -701,16 +700,13 @@ json_dump_internal(JSONNode const *node, unsigned level, FILE *stream)
 		break;
 
 	case JSONT_NUMBER:
-		if (!(json_flags & JSON_FLAG_SKIP_NUMBERS)) {
-			int64_t const int_num = node->U(num);
-			if (node->U(num) == int_num)
-				fprintf(stream, "%"PRId64"\n", int_num);
-			else
-				fprintf(stream, "%g\n", node->U(num));
-			break;
-		} else {
-			fprintf(stream, "%s\n", node->U(str));
-		}
+	{
+		int64_t const int_num = node->U(num);
+		if (node->U(num) == int_num)
+			fprintf(stream, "%"PRId64"\n", int_num);
+		else
+			fprintf(stream, "%g\n", node->U(num));
+	}
 		break;
 	case JSONT_STRING:
 		fprintf(stream, "\"%s\"\n", node->U(str));

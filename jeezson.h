@@ -25,9 +25,8 @@
 #include <string.h>
 
 extern unsigned json_dump_max_level;
-extern unsigned json_flags;
 
-#define JSON_FLAG_SKIP_NUMBERS 1
+#define JSON_FLAG_NO_NUMBERS 1
 
 #if __STDC_VERSION__ >= 199901L
 # define json_each(child, node) \
@@ -77,12 +76,12 @@ typedef struct JSONWriter {
 /**
  * @return number of parsed bytes
  */
-size_t json_parse(char *buf, JSONNode *__restrict *__restrict pnodes, size_t *__restrict pnb_nodes);
+size_t json_parse(char *buf, JSONNode *__restrict *__restrict pnodes, size_t *__restrict pnb_nodes, unsigned flags);
 
 #if defined(__GNUC__)
 __attribute__((const))
 #endif
-JSONNode *json_get(JSONNode const *__restrict node, char const *__restrict keystr);
+JSONNode *json_get(JSONNode const *__restrict node, char const *__restrict key);
 
 #if defined(__GNUC__)
 __attribute__((const, always_inline))
